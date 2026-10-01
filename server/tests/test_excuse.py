@@ -179,6 +179,8 @@ def test_prompt_has_no_specific_example_scenes() -> None:
         ("공손한 직장인체", {"excuse": "버스가 늦게 왔습니다.", "comment": "소인도 믿겠습니다."}),
         ("공손한 직장인체", {"excuse": "부득이한 조치였사오니 양해 바랍니다.", "comment": "평범하네요."}),
         ("사극체", {"excuse": "소인, 세종대왕을 뵙고 왔사옵니다.", "comment": "허황되옵니다."}),  # 실존 인물
+        ("급식체", {"excuse": "버스 놓쳐서 늦었음.", "comment": "이딴 걸 믿으라고?"}),  # 비속어
+        ("급식체", {"excuse": "이딴 버스 때문에 늦었음.", "comment": "그럴 수 있지."}),
     ],
 )
 def test_rule_violation_is_retried(monkeypatch: pytest.MonkeyPatch, tone: str, bad: dict[str, str]) -> None:
@@ -281,3 +283,21 @@ def test_no_slang_when_no_candidate_for_level(monkeypatch: pytest.MonkeyPatch) -
 def test_borderline_slang_in_profanity_rule() -> None:
     for word in ["개노잼", "개레전드", "이딴"]:
         assert word in llm.SYSTEM_PROMPT, word
+
+
+def test_slang_usage_is_description_not_sentence() -> None:
+    # 쓰임에 예시 문장(표현 자체)을 넣으면 LLM이 그대로 베끼므로 설명만 둔다
+    for s in llm.SLANG:
+        assert s.expression not in s.usage, s.expression
+
+
+def test_rule_violation_retry_tells_what_to_fix(monkeypatch: pytest.MonkeyPatch) -> None:
+    bad = json.dumps({"excuse": "외계인 때문에 늦었음.", "comment": "이딴 걸 믿으라고?"}, ensure_ascii=False)
+    ok = json.dumps({"excuse": "외계인 때문에 늦었음.", "comment": "믿을 수가 없네"}, ensure_ascii=False)
+    calls: list[str] = []
+    monkeypatch.setattr(llm, "_call_model", fake_model(bad, ok, calls=calls))
+    res = client.post("/api/excuse", json={**VALID, "tone": "급식체", "absurdity": 10})
+    assert res.status_code == 200
+    assert "[다시 쓰기]" not in calls[0]
+    assert "[다시 쓰기]" in calls[1] and "이딴" in calls[1]  # 무엇을 어겼는지 재시도 프롬프트에 알려준다
+    assert calls[1].startswith(calls[0])  # 원래 요청 내용(소재·점수 등)은 그대로

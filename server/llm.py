@@ -23,11 +23,17 @@ TIMEOUT_SECONDS = 15
 SCORE_IN_COMMENT = re.compile(r"\d|점짜리|신뢰도|퍼센트|%")
 SAGEUK_WORDS = re.compile(r"사옵|사오|옵니다|옵소서|이옵|하오|소인")  # ponytail: 대표 사극 어미만, 새는 패턴 발견 시 추가
 # ponytail: 샘플에서 실제로 나온 실존 인물 위주의 짧은 목록. 전부 막을 수는 없으니 새로 나오면 추가
+# 비속어 중 평범한 단어와 헷갈리지 않는 것만 검사한다 ("개-" 접두어는 개찰구·개구리 등과 구분이 안 돼 프롬프트 규칙만 둠)
+PROFANITY = re.compile(r"이딴")
 REAL_PEOPLE = re.compile(r"세종|이순신|광종|태조|정조|영조|장영실|신사임당|아인슈타인|뉴턴|에디슨|나폴레옹|셰익스피어")
 
 
 class LLMError(Exception):
     """LLM 호출 실패 또는 응답 파싱 실패 (재시도 후)."""
+
+
+class RuleViolation(ValueError):
+    """응답이 서버 검사 규칙을 어김. 메시지는 재시도 프롬프트에 그대로 붙여 LLM에게 무엇을 고칠지 알려준다."""
 
 
 class LLMTimeout(Exception):
@@ -106,7 +112,7 @@ def pick_slang(tone: str, absurdity: int) -> Slang | None:
 
 def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
     """코드펜스(```)를 지우고 JSON을 읽는다. credibility는 LLM 값 대신 서버가 뽑은 값을 쓴다.
-    코멘트에 점수 숫자가 있거나, 사극체가 아닌데 사극 어미가 섞이거나, 실존 인물이 나오면 ValueError (재시도 대상)."""
+    코멘트에 점수 숫자가 있거나, 사극체가 아닌데 사극 어미가 섞이거나, 실존 인물이나 비속어("이딴")가 나오면 RuleViolation (재시도 대상)."""
     text = text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
@@ -115,11 +121,13 @@ def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
     data["credibility"] = credibility
     res = ExcuseResponse.model_validate(data)
     if SCORE_IN_COMMENT.search(res.comment):
-        raise ValueError("comment mentions score")
+        raise RuleViolation("코멘트에 숫자나 점수 표현을 썼다. 점수는 말하지 말고 느낌만 표현한다")
     if tone != "사극체" and SAGEUK_WORDS.search(res.excuse + res.comment):
-        raise ValueError("tone mixed")
+        raise RuleViolation(f"{tone}인데 사극 어미가 섞였다. 끝까지 {tone}만 쓴다")
     if REAL_PEOPLE.search(res.excuse + res.comment):
-        raise ValueError("real person")
+        raise RuleViolation("실존 인물 이름을 썼다. 실존 인물은 등장시키지 않는다")
+    if PROFANITY.search(res.excuse + res.comment):
+        raise RuleViolation('"이딴" 같은 비속어를 썼다. 비속어 없이 재치 있게 쓴다')
     return res
 
 
@@ -136,6 +144,9 @@ async def _generate_with_retry(req: ExcuseRequest) -> ExcuseResponse:
         except Exception as e:  # API 오류(503 등), JSON 파싱·검증 실패 모두 1회 재시도
             if attempt == 1:
                 raise LLMError(type(e).__name__) from e
+            if isinstance(e, RuleViolation):
+                # 같은 프롬프트로 다시 보내면 같은 실수를 반복하기 쉬워서, 무엇을 어겼는지 알려준다
+                user += f"\n[다시 쓰기] 직전 답이 규칙을 어겼다: {e}. 이 점을 고쳐 처음부터 새로 써라."
     raise AssertionError("unreachable")
 
 

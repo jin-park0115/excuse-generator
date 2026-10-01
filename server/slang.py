@@ -7,7 +7,7 @@ from typing import NamedTuple
 class Slang(NamedTuple):
     expression: str  # 표현 그대로
     meaning: str  # 뜻
-    usage: str  # 어울리는 쓰임 예시
+    usage: str  # 어디에 어떻게 쓰는지 설명 (예시 문장을 적으면 LLM이 그대로 베끼므로 설명으로 쓴다)
     min_level: int = 1  # 쓸 수 있는 황당함 레벨 범위 (기본: 모든 레벨)
     max_level: int = 10
 
@@ -16,12 +16,12 @@ SLANG = [
     Slang(
         expression="엄..",
         meaning="말문이 막히거나 어이없을 때 문장 앞에 붙이는 추임새",
-        usage="엄.. 나도 내가 왜 늦었는지 모르겠음",
+        usage="어이없거나 말문이 막히는 순간, 본문 문장 맨 앞에 추임새로 붙임",
     ),
     Slang(
         expression="줴줴이야~",
         meaning='GG를 찰지게 외치는 말. "끝났다, 망했다"는 뜻',
-        usage="신뢰도가 낮을 때 코멘트에: 이 핑계는 줴줴이야~",
+        usage="신뢰도가 낮을 때 코멘트 끝에 붙임",
         min_level=9,  # "망했다"는 뜻이라 신뢰도가 낮은 레벨 9~10에서만
         max_level=10,
     ),
