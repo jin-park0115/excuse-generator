@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import random
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -48,22 +49,39 @@ async def _call_model(system: str, user: str) -> str:
     return res.text or ""
 
 
-def parse_response(text: str) -> ExcuseResponse:
-    """코드펜스(```)를 지우고 JSON을 읽는다. credibility는 0~100으로 클램프한다."""
+def credibility_range(absurdity: int) -> tuple[int, int]:
+    """레벨별 신뢰도 범위 (PRD 섹션 6 표)."""
+    if absurdity <= 3:
+        return (70, 95)
+    if absurdity <= 6:
+        return (30, 70)
+    if absurdity <= 9:
+        return (5, 30)
+    return (0, 5)
+
+
+def pick_credibility(absurdity: int) -> int:
+    """신뢰도는 LLM이 아니라 서버가 레벨별 범위 안에서 랜덤 정수로 뽑는다."""
+    return random.randint(*credibility_range(absurdity))
+
+
+def parse_response(text: str, credibility: int) -> ExcuseResponse:
+    """코드펜스(```)를 지우고 JSON을 읽는다. credibility는 LLM 값 대신 서버가 뽑은 값을 쓴다."""
     text = text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else ""
         text = text.rsplit("```", 1)[0]
     data = json.loads(text)
-    data["credibility"] = max(0, min(100, int(data["credibility"])))
+    data["credibility"] = credibility
     return ExcuseResponse.model_validate(data)
 
 
 async def _generate_with_retry(req: ExcuseRequest) -> ExcuseResponse:
-    user = build_user_prompt(req)
+    credibility = pick_credibility(req.absurdity)  # 재시도해도 같은 점수를 쓴다
+    user = build_user_prompt(req, credibility)
     for attempt in range(2):  # 처음 1번 + 재시도 1번
         try:
-            return parse_response(await _call_model(SYSTEM_PROMPT, user))
+            return parse_response(await _call_model(SYSTEM_PROMPT, user), credibility)
         except LLMError:
             raise  # 키 없음 등 설정 문제는 재시도해도 소용없다
         except Exception as e:  # API 오류(503 등), JSON 파싱·검증 실패 모두 1회 재시도

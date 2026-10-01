@@ -10,7 +10,7 @@ from main import app
 
 client = TestClient(app)
 VALID = {"situation": "지각", "absurdity": 7, "tone": "사극체", "previous_excuse": None}
-GOOD = json.dumps({"excuse": "소인, 학이 길을 막아…", "credibility": 12, "comment": "학이 나오는 순간 끝."}, ensure_ascii=False)
+GOOD = json.dumps({"excuse": "소인, 학이 길을 막아…", "comment": "학이 나오는 순간 끝."}, ensure_ascii=False)
 
 
 def fake_model(*responses: str, calls: list[str] | None = None):
@@ -32,17 +32,29 @@ def test_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(llm, "_call_model", fake_model(GOOD))
     res = client.post("/api/excuse", json=VALID)
     assert res.status_code == 200
-    assert res.json() == json.loads(GOOD)
+    body = res.json()
+    assert body["excuse"] == "소인, 학이 길을 막아…" and body["comment"] == "학이 나오는 순간 끝."
+    assert 5 <= body["credibility"] <= 30  # 레벨 7 범위
 
 
-def test_tone_defaults_and_code_fence_and_clamp(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tone_default_and_code_fence_and_server_credibility(monkeypatch: pytest.MonkeyPatch) -> None:
+    # LLM이 credibility를 보내도 무시하고, 서버가 뽑아 프롬프트에 넘긴 값을 그대로 쓴다
     fenced = '```json\n{"excuse": "평행우주의 제가…", "credibility": 150, "comment": "우주적"}\n```'
     calls: list[str] = []
     monkeypatch.setattr(llm, "_call_model", fake_model(fenced, calls=calls))
     res = client.post("/api/excuse", json={"situation": "지각", "absurdity": 10})
     assert res.status_code == 200
-    assert res.json()["credibility"] == 100
+    cred = res.json()["credibility"]
+    assert 0 <= cred <= 5
+    assert f"신뢰도: {cred}" in calls[0]
     assert "말투: 공손한 직장인체" in calls[0]
+
+
+@pytest.mark.parametrize("level,low,high", [(1, 70, 95), (3, 70, 95), (4, 30, 70), (6, 30, 70), (7, 5, 30), (9, 5, 30), (10, 0, 5)])
+def test_credibility_range_per_level(level: int, low: int, high: int) -> None:
+    values = {llm.pick_credibility(level) for _ in range(500)}
+    assert min(values) >= low and max(values) <= high
+    assert len(values) > 1  # 매번 같은 값이 아니라 랜덤
 
 
 def test_previous_excuse_adds_instruction(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,6 +70,7 @@ def test_retry_once_then_success(monkeypatch: pytest.MonkeyPatch) -> None:
     res = client.post("/api/excuse", json=VALID)
     assert res.status_code == 200
     assert len(calls) == 2
+    assert calls[0] == calls[1]  # 재시도 때도 같은 신뢰도를 넘긴다
 
 
 @pytest.mark.parametrize(
