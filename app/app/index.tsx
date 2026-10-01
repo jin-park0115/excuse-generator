@@ -1,8 +1,11 @@
-// 홈 화면. 상황(F1)과 황당함 레벨(F2)을 고르고 "핑계 만들기"로 결과 화면에 간다.
+// 홈 화면. 상황(F1)·황당함 레벨(F2)·말투(F6)를 고르고 "핑계 만들기"로 결과 화면에 간다. 우상단 아이콘은 기록 화면.
 import Slider from '@react-native-community/slider';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import Chip from '@/components/Chip';
+import { TONES, type Tone } from '@/lib/api';
 
 const SITUATIONS = ['지각', '약속 취소', '과제 미제출', '연락 늦게 봄', '모임 불참', '운동 빠짐'];
 const CUSTOM = '직접 입력';
@@ -19,6 +22,7 @@ export default function HomeScreen() {
   const [selected, setSelected] = useState<string | null>(null);
   const [customText, setCustomText] = useState('');
   const [absurdity, setAbsurdity] = useState(5);
+  const [tone, setTone] = useState<Tone>(TONES[0]);
 
   // 직접 입력이면 입력값(1~50자), 아니면 고른 칩이 상황이 된다
   const situation = selected === CUSTOM ? customText.trim() : selected;
@@ -26,19 +30,19 @@ export default function HomeScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable onPress={() => router.push('/history')} style={styles.headerIcon} accessibilityRole="button" accessibilityLabel="기록 보기">
+              <Text style={styles.headerIconText}>🕘</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <Text style={styles.section}>어떤 상황인가요?</Text>
       <View style={styles.chips}>
         {[...SITUATIONS, CUSTOM].map((s) => (
-          <Pressable
-            key={s}
-            onPress={() => setSelected(s)}
-            style={[styles.chip, selected === s && styles.chipOn]}
-            accessibilityRole="button"
-            accessibilityLabel={`상황: ${s}`}
-            accessibilityState={{ selected: selected === s }}
-          >
-            <Text style={selected === s && styles.chipTextOn}>{s}</Text>
-          </Pressable>
+          <Chip key={s} label={s} selected={selected === s} onPress={() => setSelected(s)} accessibilityLabel={`상황: ${s}`} />
         ))}
       </View>
       {selected === CUSTOM && (
@@ -65,9 +69,16 @@ export default function HomeScreen() {
         accessibilityLabel="황당함 레벨"
       />
 
+      <Text style={styles.section}>말투</Text>
+      <View style={styles.chips}>
+        {TONES.map((t) => (
+          <Chip key={t} label={t} selected={tone === t} onPress={() => setTone(t)} accessibilityLabel={`말투: ${t}`} />
+        ))}
+      </View>
+
       <Pressable
         disabled={!canSubmit}
-        onPress={() => router.push({ pathname: '/result', params: { situation: situation ?? '', absurdity } })}
+        onPress={() => router.push({ pathname: '/result', params: { situation: situation ?? '', absurdity, tone } })}
         style={[styles.button, !canSubmit && styles.buttonOff]}
         accessibilityRole="button"
         accessibilityLabel="핑계 만들기"
@@ -83,9 +94,8 @@ const styles = StyleSheet.create({
   container: { padding: 20, gap: 12 },
   section: { fontSize: 16, fontWeight: '600', marginTop: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 44, paddingHorizontal: 16, justifyContent: 'center', borderRadius: 22, borderWidth: 1, borderColor: '#ccc' },
-  chipOn: { backgroundColor: '#208AEF', borderColor: '#208AEF' },
-  chipTextOn: { color: '#fff', fontWeight: '600' },
+  headerIcon: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  headerIconText: { fontSize: 22 },
   input: { minHeight: 44, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 12 },
   level: { fontSize: 20, textAlign: 'center' },
   button: { minHeight: 52, marginTop: 16, borderRadius: 12, backgroundColor: '#208AEF', alignItems: 'center', justifyContent: 'center' },

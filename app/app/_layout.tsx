@@ -6,6 +6,7 @@ export default function RootLayout() {
     <Stack>
       <Stack.Screen name="index" options={{ title: '핑계 생성기' }} />
       <Stack.Screen name="result" options={{ title: '결과' }} />
+      <Stack.Screen name="history" options={{ title: '기록' }} />
     </Stack>
   );
 }

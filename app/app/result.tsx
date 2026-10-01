@@ -1,16 +1,20 @@
-// 결과 화면. 서버에서 핑계를 받아 보여주고 다시 뽑기(F4), 복사·공유(F5)를 한다.
+// 결과 화면. 서버에서 핑계를 받아 신뢰도 게이지(F7)와 함께 보여주고, 다시 뽑기(F4)·복사·공유(F5)·즐겨찾기(F9)를 한다.
+// 생성된 핑계는 기록(F8)에 자동 저장된다.
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
-import { ApiError, fetchExcuse, type Excuse } from '@/lib/api';
+import CredibilityGauge from '@/components/CredibilityGauge';
+import { ApiError, fetchExcuse, type Tone } from '@/lib/api';
+import { addHistory, toggleFavorite, type SavedExcuse } from '@/lib/storage';
 
 const LOADING_TEXTS = ['변명을 숙성하는 중…', '알리바이를 짜맞추는 중…', '그럴듯함을 계산하는 중…', '핑계 장인을 깨우는 중…'];
 
 export default function ResultScreen() {
-  const { situation, absurdity } = useLocalSearchParams<{ situation: string; absurdity: string }>();
-  const [excuse, setExcuse] = useState<Excuse | null>(null);
+  const { situation, absurdity, tone } = useLocalSearchParams<{ situation: string; absurdity: string; tone: Tone }>();
+  const [excuse, setExcuse] = useState<SavedExcuse | null>(null);
+  const [favorite, setFavorite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingText, setLoadingText] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -19,7 +23,18 @@ export default function ResultScreen() {
     setLoadingText(LOADING_TEXTS[Math.floor(Math.random() * LOADING_TEXTS.length)]);
     setError(null);
     try {
-      setExcuse(await fetchExcuse({ situation, absurdity: Number(absurdity), previous_excuse: previous }));
+      const res = await fetchExcuse({ situation, absurdity: Number(absurdity), tone, previous_excuse: previous });
+      const saved: SavedExcuse = {
+        ...res,
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        situation,
+        absurdity: Number(absurdity),
+        tone,
+        createdAt: Date.now(),
+      };
+      setExcuse(saved);
+      setFavorite(false);
+      await addHistory(saved);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '핑계 공장이 잠깐 멈췄어요');
     } finally {
@@ -51,7 +66,7 @@ export default function ResultScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.meta}>
-        {situation} · 황당함 {absurdity}
+        {situation} · 황당함 {absurdity} · {tone}
       </Text>
       <View style={styles.card}>
         {loading ? (
@@ -66,11 +81,19 @@ export default function ResultScreen() {
         )}
       </View>
 
+      {canUse && <CredibilityGauge credibility={excuse.credibility} comment={excuse.comment} />}
+
       <View style={styles.row}>
         {/* 에러 후 다시 뽑기는 마지막으로 성공한 핑계를 previous_excuse로 보낸다 */}
         <ActionButton label="다시 뽑기" disabled={loading} onPress={() => load(excuse?.excuse ?? null)} />
         <ActionButton label="복사" disabled={!canUse} onPress={copy} />
         <ActionButton label="공유" disabled={!canUse} onPress={() => excuse && Share.share({ message: excuse.excuse })} />
+        <ActionButton
+          label={favorite ? '★' : '☆'}
+          accessibilityLabel={favorite ? '즐겨찾기 해제' : '즐겨찾기'}
+          disabled={!canUse}
+          onPress={async () => excuse && setFavorite(await toggleFavorite(excuse))}
+        />
       </View>
 
       {toast && <Text style={styles.toast}>{toast}</Text>}
@@ -78,14 +101,16 @@ export default function ResultScreen() {
   );
 }
 
-function ActionButton({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) {
+type ActionButtonProps = { label: string; accessibilityLabel?: string; disabled: boolean; onPress: () => void };
+
+function ActionButton({ label, accessibilityLabel, disabled, onPress }: ActionButtonProps) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       style={[styles.button, disabled && styles.buttonOff]}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled }}
     >
       <Text style={styles.buttonText}>{label}</Text>

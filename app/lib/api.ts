@@ -1,7 +1,11 @@
 // 서버 /api/excuse 호출. 실패하면 화면에 보여줄 문구(PRD 섹션 5)를 담은 ApiError를 던진다.
 
+// 서버가 허용하는 말투 5개 (server/schemas.py의 Tone과 같아야 한다). 첫 번째가 기본값
+export const TONES = ['공손한 직장인체', '사극체', '급식체', '뉴스 앵커체', '발표자(학회)체'] as const;
+export type Tone = (typeof TONES)[number];
+
 export type Excuse = { excuse: string; credibility: number; comment: string };
-export type ExcuseRequest = { situation: string; absurdity: number; previous_excuse: string | null };
+export type ExcuseRequest = { situation: string; absurdity: number; tone: Tone; previous_excuse: string | null };
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const TIMEOUT_MS = 20000;
