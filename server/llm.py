@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from prompts import COSMIC_TOPICS, REALISTIC_TOPICS, SYSTEM_PROMPT, build_user_prompt
+from prompts import ABSURD_TOPICS, COSMIC_TOPICS, REALISTIC_TOPICS, SUSPICIOUS_TOPICS, SYSTEM_PROMPT, build_user_prompt
 from schemas import ExcuseRequest, ExcuseResponse
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -74,13 +74,20 @@ def pick_credibility(absurdity: int) -> int:
     return random.randint(*credibility_range(absurdity))
 
 
-def pick_topic(absurdity: int) -> str | None:
-    """레벨 1~3은 현실 소재, 10은 우주적 소재 중 하나를 랜덤으로 고른다. 4~9는 None (LLM이 자유롭게)."""
+def topic_pool(absurdity: int) -> list[str]:
+    """레벨 구간별 소재 후보 목록 (prompts.py)."""
     if absurdity <= 3:
-        return random.choice(REALISTIC_TOPICS)
-    if absurdity == 10:
-        return random.choice(COSMIC_TOPICS)
-    return None
+        return REALISTIC_TOPICS
+    if absurdity <= 6:
+        return SUSPICIOUS_TOPICS
+    if absurdity <= 9:
+        return ABSURD_TOPICS
+    return COSMIC_TOPICS
+
+
+def pick_topic(absurdity: int) -> str:
+    """레벨에 맞는 소재 후보 중 하나를 랜덤으로 고른다 (LLM이 프롬프트 예시만 따라 하는 쏠림 방지)."""
+    return random.choice(topic_pool(absurdity))
 
 
 def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
