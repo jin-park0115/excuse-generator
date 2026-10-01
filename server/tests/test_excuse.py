@@ -218,3 +218,9 @@ def test_retry_keeps_same_topic_and_exaggeration(monkeypatch: pytest.MonkeyPatch
 def test_prompt_has_level_7_to_9_bar() -> None:
     assert "레벨 4~6보다 확실히 황당" in llm.SYSTEM_PROMPT
     assert "웃음이 터질" in llm.SYSTEM_PROMPT
+
+
+def test_level_7_to_9_forbids_level_10_moves() -> None:
+    assert "저절로 생기거나 늘어나는 것" in llm.SYSTEM_PROMPT
+    assert "기계가 스스로 의지를 갖는 것" in llm.SYSTEM_PROMPT
+    assert any("원래 있던 사람·물건" in e for e in llm.EXAGGERATIONS)
