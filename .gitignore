@@ -1,0 +1,6 @@
+# API 키가 든 .env는 절대 커밋하지 않는다 (.env.example만 커밋)
+.env
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
