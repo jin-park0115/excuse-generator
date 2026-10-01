@@ -3,7 +3,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import CredibilityGauge from '@/components/CredibilityGauge';
 import { useTheme } from '@/constants/theme';
@@ -62,10 +62,28 @@ export default function ResultScreen() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const copy = async () => {
+  const copy = async (doneMessage = '복사했어요!') => {
     if (!excuse) return;
-    await Clipboard.setStringAsync(excuse.excuse);
-    setToast('복사했어요!');
+    try {
+      await Clipboard.setStringAsync(excuse.excuse);
+      setToast(doneMessage);
+    } catch {
+      setToast('복사하지 못했어요'); // 웹에서 클립보드 권한이 없을 때 등
+    }
+  };
+
+  // 웹 브라우저 중 공유 시트(navigator.share)가 없는 곳(대부분의 PC 브라우저)은 복사로 대신한다
+  const share = async () => {
+    if (!excuse) return;
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && !('share' in navigator)) {
+      await copy('공유 대신 복사했어요. 원하는 곳에 붙여넣어 주세요');
+      return;
+    }
+    try {
+      await Share.share({ message: excuse.excuse });
+    } catch {
+      // 사용자가 공유 창을 닫은 경우 등은 무시한다
+    }
   };
 
   const loading = loadingText !== null;
@@ -99,8 +117,8 @@ export default function ResultScreen() {
       {/* 에러 후 다시 뽑기는 마지막으로 성공한 핑계를 previous_excuse로 보낸다 */}
       <ActionButton primary label="다시 뽑기" disabled={loading} onPress={() => load(excuse?.excuse ?? null)} />
       <View style={styles.row}>
-        <ActionButton label="복사" disabled={!canUse} onPress={copy} />
-        <ActionButton label="공유" disabled={!canUse} onPress={() => excuse && Share.share({ message: excuse.excuse })} />
+        <ActionButton label="복사" disabled={!canUse} onPress={() => copy()} />
+        <ActionButton label="공유" disabled={!canUse} onPress={share} />
         <ActionButton
           label={favorite ? '★ 저장됨' : '☆ 즐겨찾기'}
           accessibilityLabel={favorite ? '즐겨찾기 해제' : '즐겨찾기'}

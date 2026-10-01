@@ -2,7 +2,7 @@
 // 폰의 라이트/다크 설정에 맞춰 헤더·배경 색을 바꾼다.
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 
 import { useTheme } from '@/constants/theme';
 
@@ -18,7 +18,8 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={navTheme}>
       <StatusBar style="auto" />
-      <Stack>
+      {/* 웹의 넓은 PC 화면에서는 내용을 가운데 640px 폭으로 모은다 */}
+      <Stack screenOptions={Platform.OS === 'web' ? { contentStyle: { width: '100%', maxWidth: 640, alignSelf: 'center' } } : undefined}>
         <Stack.Screen name="index" options={{ title: '핑계 생성기' }} />
         <Stack.Screen name="result" options={{ title: '결과' }} />
         <Stack.Screen name="history" options={{ title: '기록' }} />

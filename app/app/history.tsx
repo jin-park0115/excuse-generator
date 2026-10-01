@@ -1,7 +1,7 @@
-// 기록 화면. 최근 생성 20개(F8)와 즐겨찾기(F9) 탭, 항목을 누르면 전체 보기, 왼쪽으로 밀면 삭제.
+// 기록 화면. 최근 생성 20개(F8)와 즐겨찾기(F9) 탭, 항목을 누르면 전체 보기, 왼쪽으로 밀면 삭제(웹은 ✕ 버튼).
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, FlatList, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import Chip from '@/components/Chip';
 import CredibilityGauge from '@/components/CredibilityGauge';
@@ -47,7 +47,7 @@ export default function HistoryScreen() {
         ListEmptyComponent={
           <Text style={[styles.empty, { color: c.subtext }]}>{tab === 'history' ? '아직 만든 핑계가 없어요' : '별표한 핑계가 없어요'}</Text>
         }
-        ListFooterComponent={items.length > 0 ? <Text style={[styles.hint, { color: c.subtext }]}>왼쪽으로 밀어서 삭제</Text> : null}
+        ListFooterComponent={items.length > 0 ? <Text style={[styles.hint, { color: c.subtext }]}>{Platform.OS === 'web' ? '오른쪽 위 ✕로 삭제' : '왼쪽으로 밀어서 삭제'}</Text> : null}
         renderItem={({ item }) => {
           const open = openId === item.id;
           return (
@@ -96,6 +96,18 @@ function SwipeToDelete({ onDelete, children }: { onDelete: () => void; children:
     }),
   ).current;
 
+  // 웹(특히 PC 마우스)은 밀어서 지우기가 어색해서 삭제 버튼을 따로 보여준다
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.swipeContainer}>
+        {children}
+        <Pressable onPress={onDelete} style={styles.webDelete} accessibilityRole="button" accessibilityLabel="삭제">
+          <Text style={{ color: c.subtext, fontSize: 16 }}>✕</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View
       style={styles.swipeContainer}
@@ -121,6 +133,7 @@ const styles = StyleSheet.create({
   swipeContainer: { borderRadius: 16, overflow: 'hidden' },
   deleteBg: { ...StyleSheet.absoluteFill, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 20 },
   deleteText: { color: '#fff', fontWeight: 'bold' },
+  webDelete: { position: 'absolute', top: 0, right: 0, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   item: { padding: 16, gap: 8, minHeight: 44, borderWidth: 1, borderRadius: 16 },
   meta: { fontSize: 12 },
   excuse: { fontSize: 15, lineHeight: 22 },

@@ -223,6 +223,35 @@ Render 무료 서버는 **15분 동안 요청이 없으면 잠들고, 다시 깨
 
 Render는 프록시 뒤에서 서버를 돌리므로, 서버는 `X-Forwarded-For` 헤더의 **맨 뒤 값**(프록시가 붙인 실제 접속 IP)으로 사용자를 구분한다. 맨 앞 값은 사용자가 마음대로 넣을 수 있어서 쓰지 않는다.
 
+## 배포 (웹, Vercel)
+
+같은 앱 코드를 웹으로 빌드해 Vercel에 올립니다. 지인들은 설치 없이 링크만 열면 되고, 노트북도 켜 둘 필요가 없습니다. 설정은 [`app/vercel.json`](app/vercel.json)에 있습니다.
+
+로컬에서 웹으로 미리 보기: `cd app` → `npx expo start --web`
+
+### Vercel에 올리기
+
+1. https://vercel.com 에 GitHub 계정으로 로그인 → **Add New → Project** → `excuse-generator` 저장소 **Import**
+2. 설정 화면에서:
+   - **Root Directory**: `app` (Edit을 눌러 선택)
+   - **Framework Preset**: `Other`
+   - Build Command·Output Directory는 `vercel.json`에서 읽으므로 비워 둔다 (`npx expo export --platform web` → `dist`)
+   - **Environment Variables**: `EXPO_PUBLIC_API_URL` = `https://<Render 서비스 주소>.onrender.com` (끝에 `/` 없이)
+3. **Deploy**를 누르고, 끝나면 나오는 주소(예: `https://excuse-generator.vercel.app`)를 연다
+4. 이후 `main` 브랜치에 push할 때마다 자동으로 다시 배포된다
+
+`EXPO_PUBLIC_API_URL`은 **빌드할 때** 코드에 들어가므로, 서버 주소를 바꾸면 Vercel에서 **Redeploy**해야 반영된다.
+
+### 웹에서 달라지는 점
+
+| 기능 | 앱 (Expo Go) | 웹 |
+| --- | --- | --- |
+| 공유 | OS 공유 시트 | 공유 시트를 지원하는 브라우저(모바일 Safari·Chrome 등)는 공유 시트, 지원하지 않는 브라우저(대부분의 PC)는 **클립보드 복사로 대신**하고 안내 문구 표시 |
+| 기록 삭제 | 왼쪽으로 밀기 | 항목 오른쪽 위 **✕ 버튼** |
+| 기록·즐겨찾기 저장 | 기기 저장소 | 브라우저 저장소(localStorage). 브라우저·기기마다 따로 저장되고, 사이트 데이터를 지우면 사라진다 |
+| 화면 폭 | 폰 전체 | PC에서는 가운데 640px |
+| 다크 모드 | 폰 설정 | 브라우저·OS 설정 |
+
 ## 폴더 구조
 
 ```text
@@ -231,6 +260,7 @@ excuse-generator/
 │   ├── app/                   # 화면: index(홈), result(결과), history(기록)
 │   ├── components/            # Chip, CredibilityGauge
 │   ├── constants/theme.ts     # 라이트/다크 색상
+│   ├── vercel.json            # 웹 배포 설정 (Vercel)
 │   └── lib/                   # api.ts(서버 호출), storage.ts(기록·즐겨찾기)
 ├── server/                    # FastAPI
 │   ├── main.py                # 엔드포인트, 에러 응답, CORS
