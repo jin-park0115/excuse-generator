@@ -2,5 +2,10 @@
 import { Stack } from 'expo-router';
 
 export default function RootLayout() {
-  return <Stack screenOptions={{ title: '핑계 생성기' }} />;
+  return (
+    <Stack>
+      <Stack.Screen name="index" options={{ title: '핑계 생성기' }} />
+      <Stack.Screen name="result" options={{ title: '결과' }} />
+    </Stack>
+  );
 }

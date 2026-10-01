@@ -7,6 +7,7 @@
 - Node.js 20+ / Python 3.10+
 - 폰에 **Expo Go** 앱 (App Store / Play Store, 최신 버전)
 - 컴퓨터와 폰이 **같은 Wi-Fi**에 있어야 한다
+- **Expo 계정** (https://expo.dev 에서 무료 가입). 컴퓨터에서 `npx expo login`, 폰의 Expo Go 앱에서도 같은 계정으로 로그인한다
 
 ## 서버 실행
 
