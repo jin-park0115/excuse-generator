@@ -121,3 +121,41 @@ def test_invalid_input(patch: dict[str, object]) -> None:
 def test_missing_field() -> None:
     res = client.post("/api/excuse", json={"situation": "지각"})
     assert res.status_code == 422
+
+
+def test_cosmic_topic_only_for_level_10() -> None:
+    topics = {llm.pick_cosmic_topic(10) for _ in range(500)}
+    assert topics <= set(llm.COSMIC_TOPICS)
+    assert len(topics) > 1  # 매번 같은 소재가 아니라 랜덤
+    assert all(llm.pick_cosmic_topic(level) is None for level in range(1, 10))
+
+
+def test_cosmic_topic_in_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(llm, "_call_model", fake_model(GOOD, GOOD, calls=calls))
+    client.post("/api/excuse", json={**VALID, "absurdity": 10})
+    client.post("/api/excuse", json={**VALID, "absurdity": 9})
+    assert any(f"소재: {t}" in calls[0] for t in llm.COSMIC_TOPICS)
+    assert "소재:" not in calls[1]
+
+
+@pytest.mark.parametrize(
+    "tone,bad",
+    [
+        ("사극체", {"excuse": "소인, 늦었사옵니다.", "comment": "신뢰도 3점답게 아무도 안 믿소."}),  # 코멘트에 점수
+        ("사극체", {"excuse": "소인, 늦었사옵니다.", "comment": "40점짜리 핑계이옵니다."}),
+        ("공손한 직장인체", {"excuse": "버스가 늦게 와서 늦었사옵니다.", "comment": "평범하네요."}),  # 말투 섞임
+        ("공손한 직장인체", {"excuse": "버스가 늦게 왔습니다.", "comment": "소인도 믿겠습니다."}),
+        ("공손한 직장인체", {"excuse": "부득이한 조치였사오니 양해 바랍니다.", "comment": "평범하네요."}),
+        ("사극체", {"excuse": "소인, 세종대왕을 뵙고 왔사옵니다.", "comment": "허황되옵니다."}),  # 실존 인물
+    ],
+)
+def test_rule_violation_is_retried(monkeypatch: pytest.MonkeyPatch, tone: str, bad: dict[str, str]) -> None:
+    excuse = "소인, 버스가 늦었사옵니다." if tone == "사극체" else "버스가 늦게 왔습니다."
+    good = json.dumps({"excuse": excuse, "comment": "그럴 법하네요."}, ensure_ascii=False)
+    calls: list[str] = []
+    monkeypatch.setattr(llm, "_call_model", fake_model(json.dumps(bad, ensure_ascii=False), good, calls=calls))
+    res = client.post("/api/excuse", json={**VALID, "tone": tone})
+    assert res.status_code == 200
+    assert len(calls) == 2  # 규칙 위반이라 재시도했다
+    assert res.json()["comment"] == "그럴 법하네요."
