@@ -96,11 +96,12 @@ def pick_exaggeration(absurdity: int) -> str | None:
     return random.choice(EXAGGERATIONS) if 7 <= absurdity <= 9 else None
 
 
-def pick_slang(tone: str) -> Slang | None:
-    """급식체일 때만 SLANG_RATE 확률로 유행어 하나를 고른다 (slang.py). 고르지 않으면 None."""
-    if tone != "급식체" or not SLANG or random.random() >= SLANG_RATE:
+def pick_slang(tone: str, absurdity: int) -> Slang | None:
+    """급식체일 때만, 이 레벨에서 쓸 수 있는 유행어 중 하나를 SLANG_RATE 확률로 고른다 (slang.py). 없으면 None."""
+    candidates = [s for s in SLANG if s.min_level <= absurdity <= s.max_level]
+    if tone != "급식체" or not candidates or random.random() >= SLANG_RATE:
         return None
-    return random.choice(SLANG)
+    return random.choice(candidates)
 
 
 def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
@@ -125,7 +126,7 @@ def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
 async def _generate_with_retry(req: ExcuseRequest) -> ExcuseResponse:
     credibility = pick_credibility(req.absurdity)  # 재시도해도 같은 점수·소재·과장 방법·유행어를 쓴다
     user = build_user_prompt(
-        req, credibility, pick_topic(req.absurdity), pick_exaggeration(req.absurdity), pick_slang(req.tone)
+        req, credibility, pick_topic(req.absurdity), pick_exaggeration(req.absurdity), pick_slang(req.tone, req.absurdity)
     )
     for attempt in range(2):  # 처음 1번 + 재시도 1번
         try:

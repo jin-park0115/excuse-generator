@@ -228,10 +228,10 @@ def test_level_7_to_9_forbids_level_10_moves() -> None:
 
 def test_slang_only_for_geupsik() -> None:
     for tone in ["공손한 직장인체", "사극체", "뉴스 앵커체", "발표자(학회)체"]:
-        assert all(llm.pick_slang(tone) is None for _ in range(200))
-    picks = [llm.pick_slang("급식체") for _ in range(2000)]
+        assert all(llm.pick_slang(tone, 10) is None for _ in range(200))
+    picks = [llm.pick_slang("급식체", 10) for _ in range(2000)]
     assert None in picks  # 0개인 경우도 있다
-    assert {p for p in picks if p} == set(llm.SLANG)  # 목록의 유행어가 모두 나온다
+    assert {p for p in picks if p} == set(llm.SLANG)  # 레벨 10에서는 목록의 유행어가 모두 나온다
     rate = sum(p is not None for p in picks) / len(picks)
     assert abs(rate - llm.SLANG_RATE) < 0.05
 
@@ -247,9 +247,9 @@ def test_slang_in_prompt_with_meaning(monkeypatch: pytest.MonkeyPatch) -> None:
     ok = json.dumps({"excuse": "엄.. 버스 놓쳤음", "comment": "그럴 수 있지"}, ensure_ascii=False)  # 급식체 응답
     monkeypatch.setattr(llm, "_call_model", fake_model(ok, ok, calls=calls))
     slang = llm.SLANG[0]
-    monkeypatch.setattr(llm, "pick_slang", lambda tone: slang)
+    monkeypatch.setattr(llm, "pick_slang", lambda tone, level: slang)
     client.post("/api/excuse", json={**VALID, "tone": "급식체"})
-    monkeypatch.setattr(llm, "pick_slang", lambda tone: None)
+    monkeypatch.setattr(llm, "pick_slang", lambda tone, level: None)
     client.post("/api/excuse", json={**VALID, "tone": "급식체"})
     assert f'유행어: "{slang.expression}"' in calls[0] and slang.meaning in calls[0]
     assert len(calls) == 2  # 재시도 없이 요청 2번
@@ -258,3 +258,26 @@ def test_slang_in_prompt_with_meaning(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_slang_keeps_safety_rule() -> None:
     assert "유행어를 쓰더라도 실존 인물·팀·집단을 언급하거나 놀리지 않는다" in llm.SYSTEM_PROMPT
+
+
+def test_slang_level_range() -> None:
+    by_expr = {s.expression: s for s in llm.SLANG}
+    assert (by_expr["줴줴이야~"].min_level, by_expr["줴줴이야~"].max_level) == (9, 10)
+    assert (by_expr["엄.."].min_level, by_expr["엄.."].max_level) == (1, 10)
+    for level in range(1, 11):
+        picked = {llm.pick_slang("급식체", level) for _ in range(500)} - {None}
+        allowed = {s for s in llm.SLANG if s.min_level <= level <= s.max_level}
+        assert picked == allowed, level  # 레벨 범위 밖의 유행어는 절대 나오지 않는다
+
+
+def test_no_slang_when_no_candidate_for_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    only_high = [llm.Slang("줴줴이야~", "망했다", "이 핑계는 줴줴이야~", min_level=9, max_level=10)]
+    monkeypatch.setattr(llm, "SLANG", only_high)
+    monkeypatch.setattr(llm, "SLANG_RATE", 1.0)  # 확률 때문이 아니라 후보가 없어서 None인지 확인
+    assert all(llm.pick_slang("급식체", level) is None for level in range(1, 9))
+    assert llm.pick_slang("급식체", 9) == only_high[0]
+
+
+def test_borderline_slang_in_profanity_rule() -> None:
+    for word in ["개노잼", "개레전드", "이딴"]:
+        assert word in llm.SYSTEM_PROMPT, word
