@@ -224,3 +224,37 @@ def test_level_7_to_9_forbids_level_10_moves() -> None:
     assert "저절로 생기거나 늘어나는 것" in llm.SYSTEM_PROMPT
     assert "기계가 스스로 의지를 갖는 것" in llm.SYSTEM_PROMPT
     assert any("원래 있던 사람·물건" in e for e in llm.EXAGGERATIONS)
+
+
+def test_slang_only_for_geupsik() -> None:
+    for tone in ["공손한 직장인체", "사극체", "뉴스 앵커체", "발표자(학회)체"]:
+        assert all(llm.pick_slang(tone) is None for _ in range(200))
+    picks = [llm.pick_slang("급식체") for _ in range(2000)]
+    assert None in picks  # 0개인 경우도 있다
+    assert {p for p in picks if p} == set(llm.SLANG)  # 목록의 유행어가 모두 나온다
+    rate = sum(p is not None for p in picks) / len(picks)
+    assert abs(rate - llm.SLANG_RATE) < 0.05
+
+
+def test_slang_entries_complete() -> None:
+    assert llm.SLANG
+    for s in llm.SLANG:
+        assert s.expression and s.meaning and s.usage
+
+
+def test_slang_in_prompt_with_meaning(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    ok = json.dumps({"excuse": "엄.. 버스 놓쳤음", "comment": "그럴 수 있지"}, ensure_ascii=False)  # 급식체 응답
+    monkeypatch.setattr(llm, "_call_model", fake_model(ok, ok, calls=calls))
+    slang = llm.SLANG[0]
+    monkeypatch.setattr(llm, "pick_slang", lambda tone: slang)
+    client.post("/api/excuse", json={**VALID, "tone": "급식체"})
+    monkeypatch.setattr(llm, "pick_slang", lambda tone: None)
+    client.post("/api/excuse", json={**VALID, "tone": "급식체"})
+    assert f'유행어: "{slang.expression}"' in calls[0] and slang.meaning in calls[0]
+    assert len(calls) == 2  # 재시도 없이 요청 2번
+    assert "유행어:" not in calls[1]  # 고른 게 없으면 넣지 않는다
+
+
+def test_slang_keeps_safety_rule() -> None:
+    assert "유행어를 쓰더라도 실존 인물·팀·집단을 언급하거나 놀리지 않는다" in llm.SYSTEM_PROMPT

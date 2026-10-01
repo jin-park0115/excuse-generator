@@ -11,6 +11,7 @@ from google import genai
 from google.genai import types
 from prompts import ABSURD_TOPICS, COSMIC_TOPICS, EXAGGERATIONS, REALISTIC_TOPICS, SUSPICIOUS_TOPICS, SYSTEM_PROMPT, build_user_prompt
 from schemas import ExcuseRequest, ExcuseResponse
+from slang import SLANG, SLANG_RATE, Slang
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -95,6 +96,13 @@ def pick_exaggeration(absurdity: int) -> str | None:
     return random.choice(EXAGGERATIONS) if 7 <= absurdity <= 9 else None
 
 
+def pick_slang(tone: str) -> Slang | None:
+    """급식체일 때만 SLANG_RATE 확률로 유행어 하나를 고른다 (slang.py). 고르지 않으면 None."""
+    if tone != "급식체" or not SLANG or random.random() >= SLANG_RATE:
+        return None
+    return random.choice(SLANG)
+
+
 def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
     """코드펜스(```)를 지우고 JSON을 읽는다. credibility는 LLM 값 대신 서버가 뽑은 값을 쓴다.
     코멘트에 점수 숫자가 있거나, 사극체가 아닌데 사극 어미가 섞이거나, 실존 인물이 나오면 ValueError (재시도 대상)."""
@@ -115,8 +123,10 @@ def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
 
 
 async def _generate_with_retry(req: ExcuseRequest) -> ExcuseResponse:
-    credibility = pick_credibility(req.absurdity)  # 재시도해도 같은 점수·소재·과장 방법을 쓴다
-    user = build_user_prompt(req, credibility, pick_topic(req.absurdity), pick_exaggeration(req.absurdity))
+    credibility = pick_credibility(req.absurdity)  # 재시도해도 같은 점수·소재·과장 방법·유행어를 쓴다
+    user = build_user_prompt(
+        req, credibility, pick_topic(req.absurdity), pick_exaggeration(req.absurdity), pick_slang(req.tone)
+    )
     for attempt in range(2):  # 처음 1번 + 재시도 1번
         try:
             return parse_response(await _call_model(SYSTEM_PROMPT, user), credibility, req.tone)

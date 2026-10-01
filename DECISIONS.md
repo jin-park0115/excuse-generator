@@ -77,3 +77,4 @@ PRD에서 애매했던 부분과 고른 방법을 한 줄씩 기록한다.
 - [M7-3] 웹 화면 폭: PC의 넓은 화면에서 내용이 가로로 늘어나지 않게, 웹에서만 화면 내용을 가운데 최대 640px로 모은다 (헤더는 전체 폭).
 - [M7-3] Vercel 설정은 `app/vercel.json`(빌드 명령 `npx expo export --platform web`, 출력 `dist`, SPA rewrites). Vercel 프로젝트의 Root Directory는 `app`, 환경변수 EXPO_PUBLIC_API_URL은 빌드 시점에 들어가므로 바꾸면 Redeploy가 필요하다.
 - [M7-4] CORS: Render의 ALLOWED_ORIGINS를 웹 주소 `https://excuse-generator-app.vercel.app` 하나로 제한한다. 비밀 값이 아니므로 대시보드가 아니라 `render.yaml`에 고정값으로 적어, 설정이 저장소에 남고 push하면 Blueprint 자동 동기화로 반영되게 했다. 쉼표로 여러 주소를 넣을 때 앞뒤 공백은 지운다. Vercel 미리보기 주소는 허용하지 않는다 (필요하면 추가). 네이티브 앱은 Origin 헤더를 보내지 않아 영향이 없다.
+- [M7 이후] 급식체 유행어(사용자 요청): `server/slang.py`의 SLANG 목록(표현·뜻·쓰임)에서 급식체일 때만 하나를 골라 뜻·쓰임과 함께 프롬프트에 넘긴다. "0~1개"는 고정 확률 50%(SLANG_RATE)로 정했다. 목록에 "없음"을 끼워 고르는 방식은 목록이 길어질수록 유행어 비율이 올라가기 때문이다. 재시도 때도 같은 유행어를 쓴다. 안전 규칙에 "유행어를 쓰더라도 실존 인물·팀·집단을 언급하거나 놀리지 않는다"를 추가했다.
