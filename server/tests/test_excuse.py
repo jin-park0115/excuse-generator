@@ -131,20 +131,31 @@ def test_missing_field() -> None:
     assert res.status_code == 422
 
 
-def test_cosmic_topic_only_for_level_10() -> None:
-    topics = {llm.pick_cosmic_topic(10) for _ in range(500)}
-    assert topics <= set(llm.COSMIC_TOPICS)
-    assert len(topics) > 1  # 매번 같은 소재가 아니라 랜덤
-    assert all(llm.pick_cosmic_topic(level) is None for level in range(1, 10))
+@pytest.mark.parametrize("levels,pool", [((1, 2, 3), llm.REALISTIC_TOPICS), ((10,), llm.COSMIC_TOPICS)])
+def test_topic_pool_per_level(levels: tuple[int, ...], pool: list[str]) -> None:
+    for level in levels:
+        topics = {llm.pick_topic(level) for _ in range(500)}
+        assert topics <= set(pool)
+        assert len(topics) > len(pool) // 2  # 한 소재에 쏠리지 않고 여러 소재가 나온다
 
 
-def test_cosmic_topic_in_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_topic_for_levels_4_to_9() -> None:
+    assert all(llm.pick_topic(level) is None for level in range(4, 10))
+
+
+def test_topic_in_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
-    monkeypatch.setattr(llm, "_call_model", fake_model(GOOD, GOOD, calls=calls))
-    client.post("/api/excuse", json={**VALID, "absurdity": 10})
-    client.post("/api/excuse", json={**VALID, "absurdity": 9})
-    assert any(f"소재: {t}" in calls[0] for t in llm.COSMIC_TOPICS)
-    assert "소재:" not in calls[1]
+    monkeypatch.setattr(llm, "_call_model", fake_model(GOOD, GOOD, GOOD, calls=calls))
+    for level in (1, 10, 5):
+        client.post("/api/excuse", json={**VALID, "absurdity": level})
+    assert any(f"소재: {t}" in calls[0] for t in llm.REALISTIC_TOPICS)
+    assert any(f"소재: {t}" in calls[1] for t in llm.COSMIC_TOPICS)
+    assert "소재:" not in calls[2]
+
+
+def test_prompt_example_not_biased_to_bus() -> None:
+    # 레벨 1~3 가이드에 "버스 15분" 같은 특정 소재 예시가 없어야 한다
+    assert "15분" not in llm.SYSTEM_PROMPT
 
 
 @pytest.mark.parametrize(

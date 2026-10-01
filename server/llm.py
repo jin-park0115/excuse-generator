@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from prompts import COSMIC_TOPICS, SYSTEM_PROMPT, build_user_prompt
+from prompts import COSMIC_TOPICS, REALISTIC_TOPICS, SYSTEM_PROMPT, build_user_prompt
 from schemas import ExcuseRequest, ExcuseResponse
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -74,9 +74,13 @@ def pick_credibility(absurdity: int) -> int:
     return random.randint(*credibility_range(absurdity))
 
 
-def pick_cosmic_topic(absurdity: int) -> str | None:
-    """레벨 10일 때만 소재 후보 중 하나를 랜덤으로 고른다. 다른 레벨은 None."""
-    return random.choice(COSMIC_TOPICS) if absurdity == 10 else None
+def pick_topic(absurdity: int) -> str | None:
+    """레벨 1~3은 현실 소재, 10은 우주적 소재 중 하나를 랜덤으로 고른다. 4~9는 None (LLM이 자유롭게)."""
+    if absurdity <= 3:
+        return random.choice(REALISTIC_TOPICS)
+    if absurdity == 10:
+        return random.choice(COSMIC_TOPICS)
+    return None
 
 
 def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
@@ -100,7 +104,7 @@ def parse_response(text: str, credibility: int, tone: str) -> ExcuseResponse:
 
 async def _generate_with_retry(req: ExcuseRequest) -> ExcuseResponse:
     credibility = pick_credibility(req.absurdity)  # 재시도해도 같은 점수·소재를 쓴다
-    user = build_user_prompt(req, credibility, pick_cosmic_topic(req.absurdity))
+    user = build_user_prompt(req, credibility, pick_topic(req.absurdity))
     for attempt in range(2):  # 처음 1번 + 재시도 1번
         try:
             return parse_response(await _call_model(SYSTEM_PROMPT, user), credibility, req.tone)
