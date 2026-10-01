@@ -7,10 +7,11 @@ import { ActivityIndicator, Pressable, Share, StyleSheet, Text, View } from 'rea
 
 import CredibilityGauge from '@/components/CredibilityGauge';
 import { useTheme } from '@/constants/theme';
-import { ApiError, fetchExcuse, type Tone } from '@/lib/api';
+import { ApiError, fetchExcuse, isAwake, wakeServer, type Tone } from '@/lib/api';
 import { addHistory, toggleFavorite, type SavedExcuse } from '@/lib/storage';
 
 const LOADING_TEXTS = ['변명을 숙성하는 중…', '알리바이를 짜맞추는 중…', '그럴듯함을 계산하는 중…', '핑계 장인을 깨우는 중…'];
+const WAKING_TEXT = '서버를 깨우는 중이에요… (최대 1분)';
 
 export default function ResultScreen() {
   const c = useTheme();
@@ -22,9 +23,14 @@ export default function ResultScreen() {
   const [toast, setToast] = useState<string | null>(null);
 
   const load = async (previous: string | null) => {
-    setLoadingText(LOADING_TEXTS[Math.floor(Math.random() * LOADING_TEXTS.length)]);
     setError(null);
     try {
+      // 무료 서버가 잠들어 있으면 먼저 깨운다 (약 1분). 깨어 있으면 바로 넘어간다
+      if (!isAwake()) {
+        setLoadingText(WAKING_TEXT);
+        await wakeServer();
+      }
+      setLoadingText(LOADING_TEXTS[Math.floor(Math.random() * LOADING_TEXTS.length)]);
       const res = await fetchExcuse({ situation, absurdity: Number(absurdity), tone, previous_excuse: previous });
       const saved: SavedExcuse = {
         ...res,

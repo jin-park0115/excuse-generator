@@ -1,12 +1,13 @@
 // 홈 화면. 상황(F1)·황당함 레벨(F2)·말투(F6)를 고르고 "핑계 만들기"로 결과 화면에 간다. 우상단 아이콘은 기록 화면.
+// 화면이 열리면 잠든 서버를 미리 깨운다.
 import Slider from '@react-native-community/slider';
 import { router, Stack } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Chip from '@/components/Chip';
 import { useTheme } from '@/constants/theme';
-import { TONES, type Tone } from '@/lib/api';
+import { TONES, wakeServer, type Tone } from '@/lib/api';
 
 const SITUATIONS = ['지각', '약속 취소', '과제 미제출', '연락 늦게 봄', '모임 불참', '운동 빠짐'];
 const CUSTOM = '직접 입력';
@@ -25,6 +26,11 @@ export default function HomeScreen() {
   const [customText, setCustomText] = useState('');
   const [absurdity, setAbsurdity] = useState(5);
   const [tone, setTone] = useState<Tone>(TONES[0]);
+
+  // 상황을 고르는 동안 잠든 무료 서버를 미리 깨워 둔다 (실패해도 결과 화면에서 다시 시도)
+  useEffect(() => {
+    wakeServer().catch(() => {});
+  }, []);
 
   // 직접 입력이면 입력값(1~50자), 아니면 고른 칩이 상황이 된다
   const situation = selected === CUSTOM ? customText.trim() : selected;
