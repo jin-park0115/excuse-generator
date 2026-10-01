@@ -6,9 +6,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 import llm
+import main
 from main import app
+from rate_limit import RateLimiter
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def fresh_limiter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """테스트마다 레이트리밋을 새로 만들어 앞 테스트의 호출 수가 영향을 주지 않게 한다."""
+    monkeypatch.setattr(main, "limiter", RateLimiter())
 VALID = {"situation": "지각", "absurdity": 7, "tone": "사극체", "previous_excuse": None}
 GOOD = json.dumps({"excuse": "소인, 학이 길을 막아…", "comment": "학이 나오는 순간 끝."}, ensure_ascii=False)
 

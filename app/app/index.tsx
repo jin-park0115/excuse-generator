@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Chip from '@/components/Chip';
+import { useTheme } from '@/constants/theme';
 import { TONES, type Tone } from '@/lib/api';
 
 const SITUATIONS = ['지각', '약속 취소', '과제 미제출', '연락 늦게 봄', '모임 불참', '운동 빠짐'];
@@ -19,6 +20,7 @@ function levelLabel(level: number): string {
 }
 
 export default function HomeScreen() {
+  const c = useTheme();
   const [selected, setSelected] = useState<string | null>(null);
   const [customText, setCustomText] = useState('');
   const [absurdity, setAbsurdity] = useState(5);
@@ -39,7 +41,7 @@ export default function HomeScreen() {
           ),
         }}
       />
-      <Text style={styles.section}>어떤 상황인가요?</Text>
+      <Text style={[styles.section, { color: c.text }]}>어떤 상황인가요?</Text>
       <View style={styles.chips}>
         {[...SITUATIONS, CUSTOM].map((s) => (
           <Chip key={s} label={s} selected={selected === s} onPress={() => setSelected(s)} accessibilityLabel={`상황: ${s}`} />
@@ -47,17 +49,18 @@ export default function HomeScreen() {
       </View>
       {selected === CUSTOM && (
         <TextInput
-          style={styles.input}
+          style={[styles.input, { borderColor: c.border, backgroundColor: c.card, color: c.text }]}
           value={customText}
           onChangeText={setCustomText}
           maxLength={50}
           placeholder="상황을 입력하세요 (최대 50자)"
+          placeholderTextColor={c.subtext}
           accessibilityLabel="상황 직접 입력"
         />
       )}
 
-      <Text style={styles.section}>황당함 레벨</Text>
-      <Text style={styles.level}>
+      <Text style={[styles.section, { color: c.text }]}>황당함 레벨</Text>
+      <Text style={[styles.level, { color: c.text }]}>
         {LEVEL_EMOJIS[absurdity - 1]} {absurdity} · {levelLabel(absurdity)}
       </Text>
       <Slider
@@ -66,10 +69,13 @@ export default function HomeScreen() {
         step={1}
         value={absurdity}
         onValueChange={(v) => setAbsurdity(Math.round(v))}
+        minimumTrackTintColor={c.primary}
+        maximumTrackTintColor={c.track}
+        thumbTintColor={c.primary}
         accessibilityLabel="황당함 레벨"
       />
 
-      <Text style={styles.section}>말투</Text>
+      <Text style={[styles.section, { color: c.text }]}>말투</Text>
       <View style={styles.chips}>
         {TONES.map((t) => (
           <Chip key={t} label={t} selected={tone === t} onPress={() => setTone(t)} accessibilityLabel={`말투: ${t}`} />
@@ -79,12 +85,12 @@ export default function HomeScreen() {
       <Pressable
         disabled={!canSubmit}
         onPress={() => router.push({ pathname: '/result', params: { situation: situation ?? '', absurdity, tone } })}
-        style={[styles.button, !canSubmit && styles.buttonOff]}
+        style={[styles.button, { backgroundColor: canSubmit ? c.primary : c.disabled }]}
         accessibilityRole="button"
         accessibilityLabel="핑계 만들기"
         accessibilityState={{ disabled: !canSubmit }}
       >
-        <Text style={styles.buttonText}>핑계 만들기</Text>
+        <Text style={[styles.buttonText, { color: canSubmit ? c.onPrimary : c.onDisabled }]}>핑계 만들기</Text>
       </Pressable>
     </ScrollView>
   );
@@ -92,13 +98,12 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { padding: 20, gap: 12 },
-  section: { fontSize: 16, fontWeight: '600', marginTop: 8 },
+  section: { fontSize: 15, fontWeight: '600', marginTop: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   headerIcon: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   headerIconText: { fontSize: 22 },
-  input: { minHeight: 44, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 12 },
-  level: { fontSize: 20, textAlign: 'center' },
-  button: { minHeight: 52, marginTop: 16, borderRadius: 12, backgroundColor: '#208AEF', alignItems: 'center', justifyContent: 'center' },
-  buttonOff: { backgroundColor: '#aaa' },
-  buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  input: { minHeight: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12 },
+  level: { fontSize: 18, textAlign: 'center' },
+  button: { minHeight: 52, marginTop: 16, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { fontSize: 17, fontWeight: '700' },
 });

@@ -5,11 +5,13 @@ import { Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } f
 
 import Chip from '@/components/Chip';
 import CredibilityGauge from '@/components/CredibilityGauge';
+import { useTheme } from '@/constants/theme';
 import { getFavorites, getHistory, removeFavorite, removeHistory, type SavedExcuse } from '@/lib/storage';
 
 type Tab = 'history' | 'favorites';
 
 export default function HistoryScreen() {
+  const c = useTheme();
   const [tab, setTab] = useState<Tab>('history');
   const [items, setItems] = useState<SavedExcuse[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -43,23 +45,23 @@ export default function HistoryScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
-          <Text style={styles.empty}>{tab === 'history' ? '아직 만든 핑계가 없어요' : '별표한 핑계가 없어요'}</Text>
+          <Text style={[styles.empty, { color: c.subtext }]}>{tab === 'history' ? '아직 만든 핑계가 없어요' : '별표한 핑계가 없어요'}</Text>
         }
-        ListFooterComponent={items.length > 0 ? <Text style={styles.hint}>왼쪽으로 밀어서 삭제</Text> : null}
+        ListFooterComponent={items.length > 0 ? <Text style={[styles.hint, { color: c.subtext }]}>왼쪽으로 밀어서 삭제</Text> : null}
         renderItem={({ item }) => {
           const open = openId === item.id;
           return (
             <SwipeToDelete onDelete={() => remove(item.id)}>
               <Pressable
                 onPress={() => setOpenId(open ? null : item.id)}
-                style={styles.item}
+                style={[styles.item, { backgroundColor: c.card, borderColor: c.border }]}
                 accessibilityRole="button"
                 accessibilityHint={open ? '접기' : '전체 보기'}
               >
-                <Text style={styles.meta}>
+                <Text style={[styles.meta, { color: c.subtext }]}>
                   {item.situation} · 황당함 {item.absurdity} · {item.tone}
                 </Text>
-                <Text style={styles.excuse} numberOfLines={open ? undefined : 2}>
+                <Text style={[styles.excuse, { color: c.text }]} numberOfLines={open ? undefined : 2}>
                   {item.excuse}
                 </Text>
                 {open && <CredibilityGauge credibility={item.credibility} comment={item.comment} />}
@@ -76,6 +78,7 @@ const DELETE_THRESHOLD = -120;
 
 // 왼쪽으로 일정 거리 이상 밀면 onDelete를 부른다. 스크린리더 사용자는 "삭제" 동작으로 지울 수 있다.
 function SwipeToDelete({ onDelete, children }: { onDelete: () => void; children: ReactNode }) {
+  const c = useTheme();
   const x = useRef(new Animated.Value(0)).current;
   const pan = useRef(
     PanResponder.create({
@@ -99,7 +102,7 @@ function SwipeToDelete({ onDelete, children }: { onDelete: () => void; children:
       accessibilityActions={[{ name: 'delete', label: '삭제' }]}
       onAccessibilityAction={(e) => e.nativeEvent.actionName === 'delete' && onDelete()}
     >
-      <View style={styles.deleteBg}>
+      <View style={[styles.deleteBg, { backgroundColor: c.bad }]}>
         <Text style={styles.deleteText}>삭제</Text>
       </View>
       <Animated.View style={{ transform: [{ translateX: x }] }} {...pan.panHandlers}>
@@ -113,12 +116,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   list: { padding: 20, gap: 12 },
-  empty: { textAlign: 'center', color: '#888', marginTop: 40 },
-  hint: { textAlign: 'center', color: '#aaa', fontSize: 12, marginTop: 8 },
-  swipeContainer: { borderRadius: 12, overflow: 'hidden' },
-  deleteBg: { ...StyleSheet.absoluteFill, backgroundColor: '#E74C3C', alignItems: 'flex-end', justifyContent: 'center', paddingRight: 20 },
+  empty: { textAlign: 'center', marginTop: 40 },
+  hint: { textAlign: 'center', fontSize: 12, marginTop: 8 },
+  swipeContainer: { borderRadius: 16, overflow: 'hidden' },
+  deleteBg: { ...StyleSheet.absoluteFill, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 20 },
   deleteText: { color: '#fff', fontWeight: 'bold' },
-  item: { padding: 16, gap: 8, backgroundColor: '#F2F7FE', minHeight: 44 },
-  meta: { fontSize: 12, color: '#888' },
-  excuse: { fontSize: 16, lineHeight: 24 },
+  item: { padding: 16, gap: 8, minHeight: 44, borderWidth: 1, borderRadius: 16 },
+  meta: { fontSize: 12 },
+  excuse: { fontSize: 15, lineHeight: 22 },
 });

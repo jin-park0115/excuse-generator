@@ -1,55 +1,139 @@
 # 핑계 생성기
 
-상황·황당함 레벨·말투를 고르면 LLM이 핑계를 만들어주는 Expo 앱 + FastAPI 서버. 자세한 내용은 [PRD.md](PRD.md).
+> 상황·황당함 레벨·말투만 고르면, LLM이 웃기고 그럴듯한 핑계와 "신뢰도 점수"를 만들어주는 모바일 앱
 
-## 준비물
+Expo(React Native) 앱 + FastAPI 서버 + Gemini API로 만든 작은 풀스택 프로젝트입니다. 요구사항은 [PRD.md](PRD.md), 구현 중 내린 결정은 [DECISIONS.md](DECISIONS.md)에 기록했습니다.
+
+## 스크린샷
+
+| 홈 | 결과 | 기록 | 다크 모드 |
+| --- | --- | --- | --- |
+| ![홈](docs/screenshots/home.png) | ![결과](docs/screenshots/result.png) | ![기록](docs/screenshots/history.png) | ![다크 모드](docs/screenshots/dark.png) |
+
+## 주요 기능
+
+- **상황 선택**: 지각·약속 취소·과제 미제출 등 6개 + 직접 입력(최대 50자)
+- **황당함 레벨 1~10**: 1~3 현실적 / 4~6 수상함 / 7~9 황당 / 10 우주적. 레벨 1과 10의 결과가 확연히 다르다
+- **말투 5종**: 공손한 직장인체, 사극체, 급식체, 뉴스 앵커체, 발표자(학회)체
+- **신뢰도 게이지**: 0~100% 게이지와 점수에 어울리는 한 줄 코멘트
+- **다시 뽑기**: 같은 조건으로 재생성, 직전 핑계와 겹치지 않게 요청
+- **복사·공유**: 클립보드 복사, OS 공유 시트(카카오톡 등)
+- **기록·즐겨찾기**: 최근 20개 자동 저장, 별표한 핑계는 무제한 보관, 스와이프 삭제 (기기에만 저장)
+- **다크 모드**, 레이트리밋(IP당 분당 10회·일 200회), 오프라인/서버 다운 시 에러 문구
+
+## 아키텍처
+
+```mermaid
+flowchart LR
+  subgraph Phone["휴대폰 (Expo Go)"]
+    App["Expo 앱<br/>TypeScript · expo-router"]
+    Store[("AsyncStorage<br/>기록 20개 · 즐겨찾기")]
+    App <--> Store
+  end
+  App -- "POST /api/excuse<br/>{situation, absurdity, tone}" --> API["FastAPI 서버<br/>검증 · 레이트리밋 · 프롬프트 · 재시도"]
+  API -- "{excuse, credibility, comment}" --> App
+  API -- "프롬프트 + API 키(.env)" --> LLM["Gemini API"]
+  LLM -- "JSON" --> API
+```
+
+| 영역 | 기술 |
+| --- | --- |
+| 앱 | Expo SDK 57, TypeScript(strict), expo-router, AsyncStorage, expo-clipboard |
+| 서버 | Python, FastAPI, Pydantic v2, uvicorn, python-dotenv |
+| LLM | google-genai SDK (`gemini-3.5-flash-lite`) |
+| 테스트 | pytest + FastAPI TestClient (LLM은 가짜 함수로 대체, 36개) |
+
+### API 키를 서버에만 둔 이유
+
+앱 번들에 들어간 값은 누구나 꺼내 볼 수 있습니다. `EXPO_PUBLIC_` 환경변수도 빌드 시점에 코드에 그대로 박히기 때문에 비밀이 아닙니다. 그래서 앱은 **서버 주소만** 알고, LLM 호출과 API 키는 서버가 전담합니다.
+
+- 키는 `server/.env`에만 두고 `.gitignore`로 커밋에서 제외 (`.env.example`에는 키 이름만)
+- 키를 서버에 두면 **레이트리밋·입력 검증·프롬프트 관리**도 서버 한 곳에서 할 수 있다. 앱을 다시 배포하지 않고 프롬프트를 고칠 수 있다
+- 로그에는 시간·레벨·말투·응답 시간·에러 코드만 남기고, 사용자가 입력한 텍스트와 키는 남기지 않는다
+
+## 기술적으로 고민한 점
+
+### 1. "LLM에게 맡길 것"과 "서버가 정할 것"을 나누기
+
+처음에는 신뢰도 점수와 소재 선택까지 전부 프롬프트로 LLM에게 맡겼습니다. 샘플 18개(상황 3 × 레벨 1·5·10 × 말투 2)를 뽑아 직접 읽어 보니 문제가 보였습니다.
+
+- **신뢰도가 85 / 45 / 1로 고정**: "레벨 1~3은 70~95" 같은 범위를 줘도 LLM은 매번 범위 가운데 숫자를 골랐다
+- **레벨 10이 평행우주·양자역학·웜홀로 쏠림**: 프롬프트 예시("평행우주의 내가…")를 계속 따라 했다
+
+LLM은 "범위 안에서 고르게 랜덤"을 잘 못 하지만, 코드는 그 일을 정확히 합니다. 그래서 **랜덤성이 필요한 결정은 서버가 내리고, LLM에게는 결과만 알려주는** 구조로 바꿨습니다.
+
+- **신뢰도**: 서버가 레벨별 범위(1~3: 70~95, 4~6: 30~70, 7~9: 5~30, 10: 0~5)에서 `random.randint`로 뽑아 프롬프트에 넘긴다. LLM은 그 점수에 어울리는 코멘트만 쓰고, 응답의 `credibility`는 LLM이 무엇을 보내든 서버 값을 쓴다
+- **레벨 10 소재**: 서버가 후보 12개(미래로 시간여행, 외계인, 꿈이 현실이 됨, 물건이 말을 함, 중력이 사라짐 …) 중 하나를 골라 프롬프트에 넘긴다
+- 재시도할 때도 같은 점수·소재를 써서 결과가 일관된다. 두 결정 모두 단위 테스트로 범위와 랜덤성을 확인한다
+
+### 2. 프롬프트 규칙 + 서버 검사 + 1회 재시도
+
+안전 규칙과 말투 규칙을 프롬프트에 적어도 확률적으로 새어 나왔습니다. 실제로 샘플을 돌렸을 때 이런 결과가 나왔습니다.
+
+- 공손한 직장인체인데 "…늦었**사옵니다**"로 끝나는 말투 섞임
+- 코멘트에 "**48점짜리** 핑계답게…" 같은 점수 언급
+- 시간여행 소재에서 "**세종대왕**"처럼 실존 인물 등장
+
+그래서 LLM 응답을 서버가 한 번 더 검사합니다. 위반이면 JSON 파싱 실패와 똑같이 취급해 **1회 재시도**하고, 두 번 다 실패하면 `502 LLM_ERROR`를 돌려줍니다.
+
+```text
+Gemini 응답 → 코드펜스 제거 → JSON 파싱 → Pydantic 검증(길이 등)
+           → 코멘트에 숫자/점수 표현? → 사극체가 아닌데 사극 어미? → 실존 인물 이름?
+           → 하나라도 걸리면 재시도 (최대 2번, 전체 15초 타임아웃)
+```
+
+- 검사는 정규식이라 빠르고 테스트하기 쉽다. 하지만 실존 인물 목록처럼 **모든 경우를 막을 수는 없다**. 그래서 프롬프트 규칙을 1차 방어선으로 두고, 서버 검사는 실제로 자주 새던 패턴만 막는 보조 장치로 썼다
+- 15초 타임아웃은 재시도를 **포함한 전체**에 걸어, 앱의 20초 타임아웃 안에 항상 끝나게 했다
+- 테스트에서는 실제 LLM을 부르지 않고, 응답을 흉내 내는 가짜 함수로 파싱·재시도·에러 코드·레이트리밋을 검증한다
+
+### 3. 프롬프트 품질은 사람이 읽어서 확인
+
+`server/scripts/sample_excuses.py`가 실제 Gemini로 18개를 한 번에 출력합니다. 프롬프트를 고칠 때마다 이 스크립트로 레벨 차이, 말투 유지, 레벨 4~6이 "현실에서 있을 법한 사건 1개 + 과한 디테일"에 머무는지를 눈으로 확인했습니다.
+
+## 실행 방법
+
+### 준비물
 
 - Node.js 20+ / Python 3.10+
 - 폰에 **Expo Go** 앱 (App Store / Play Store, 최신 버전)
-- 컴퓨터와 폰이 **같은 Wi-Fi**에 있어야 한다
-- **Expo 계정** (https://expo.dev 에서 무료 가입). 컴퓨터에서 `npx expo login`, 폰의 Expo Go 앱에서도 같은 계정으로 로그인한다
+- **Expo 계정** (https://expo.dev 에서 무료 가입). 컴퓨터에서 `npx expo login`, 폰의 Expo Go 앱에서도 같은 계정으로 로그인
+- **Gemini API 키** (https://aistudio.google.com/apikey 에서 무료 발급)
+- 컴퓨터와 폰이 **같은 Wi-Fi**에 연결
 
-## 서버 실행
+### 1. 서버
 
 ```bash
 cd server
 python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env               # GEMINI_API_KEY에 Gemini API 키를 넣는다
+cp .env.example .env        # Windows: copy .env.example .env  → GEMINI_API_KEY 값을 채운다
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Gemini API 키는 https://aistudio.google.com/apikey 에서 무료로 받을 수 있다. 서버는 로컬에서만 실행한다.
+- 확인: 브라우저에서 http://localhost:8000/health → `{"status":"ok"}`
+- 테스트: `pytest` (실제 LLM은 호출하지 않음)
+- 샘플 핑계 18개 보기 (실제 Gemini 호출, 약 1.5분): `python -m scripts.sample_excuses`
+  - Windows에서 한글이 깨지면 먼저 `set PYTHONIOENCODING=utf-8`
 
-확인: 브라우저에서 http://localhost:8000/health → `{"status":"ok"}`
+### 2. 앱 서버 주소 설정 (`EXPO_PUBLIC_API_URL`)
 
-테스트: `server` 폴더에서 `pytest` (실제 LLM은 호출하지 않는다)
-
-샘플 핑계 18개 보기 (실제 Gemini 호출, 약 1.5분): `server` 폴더에서 `python -m scripts.sample_excuses`
-
-## 앱 실행
-
-### 1. 서버 주소 설정 (EXPO_PUBLIC_API_URL)
-
-폰은 노트북의 `localhost`에 접속할 수 없으므로, 노트북의 **Wi-Fi IP 주소**를 앱에 알려줘야 한다.
+폰은 노트북의 `localhost`에 접속할 수 없으므로, 노트북의 **Wi-Fi IP 주소**를 앱에 알려줘야 합니다.
 
 1. 노트북 IP 확인
-   - Windows: PowerShell에서 `ipconfig` → **"무선 LAN 어댑터 Wi-Fi"** 항목의 `IPv4 주소` (예: `192.168.0.10`)
-     - `vEthernet (WSL)`, `169.254.x.x` 주소는 쓰면 안 된다
+   - Windows: `ipconfig` → **"무선 LAN 어댑터 Wi-Fi"** 항목의 `IPv4 주소` (예: `192.168.0.10`)
+     - `vEthernet (WSL)`이나 `169.254.x.x` 주소는 쓰지 않는다
    - macOS: `ipconfig getifaddr en0`
-2. `app/.env` 파일 만들기 (`app/.env.example`을 복사)
+2. `app/.env.example`을 `app/.env`로 복사하고 주소를 넣는다
    ```
    EXPO_PUBLIC_API_URL=http://192.168.0.10:8000
    ```
-   `http://`와 포트 `:8000`까지 적고, 끝에 `/`는 붙이지 않는다.
-3. 폰 브라우저에서 `http://<노트북 IP>:8000/health`를 열어 `{"status":"ok"}`가 보이는지 확인한다.
-   안 보이면 앱도 서버에 접속할 수 없다 → 아래 "연결이 안 될 때" 참고.
+   `http://`와 `:8000`까지 적고, 끝에 `/`는 붙이지 않는다.
+3. 폰 브라우저에서 `http://<노트북 IP>:8000/health`가 열리는지 먼저 확인한다
 
-`.env`를 바꾼 뒤에는 `npx expo start -c`로 캐시를 지우고 다시 시작해야 반영된다.
-Wi-Fi가 바뀌면 IP도 바뀌니 다시 확인한다.
+`.env`를 바꾼 뒤에는 `npx expo start -c`로 캐시를 지우고 다시 시작해야 반영됩니다. Wi-Fi가 바뀌면 IP도 바뀝니다.
 
-### 2. 실행
+### 3. 앱
 
 ```bash
 cd app
@@ -57,11 +141,38 @@ npm install
 npx expo start
 ```
 
-터미널에 뜬 QR 코드를 폰으로 스캔한다 (iOS는 카메라 앱, Android는 Expo Go 앱의 스캔 기능).
+터미널의 QR 코드를 폰으로 스캔합니다 (iOS는 카메라 앱, Android는 Expo Go 앱의 스캔 기능).
 
 ### 연결이 안 될 때
 
-- 서버를 `--host 0.0.0.0`으로 실행했는지 확인한다 (빠뜨리면 노트북 안에서만 접속된다).
-- Windows 방화벽 허용 창이 뜨면 허용한다.
-- 회사·학교 Wi-Fi는 기기끼리의 통신을 막는 경우가 있다. 이때는 폰 핫스팟에 노트북을 연결하고, 노트북 IP를 다시 확인해서 `.env`에 넣는다.
-- QR 스캔 후 앱 자체가 안 뜨면 `npx expo start --tunnel`을 쓴다. 단, 이 방법은 앱 번들만 터널로 받으므로 서버 주소(`EXPO_PUBLIC_API_URL`)는 여전히 같은 네트워크의 IP여야 한다.
+| 증상 | 확인할 것 |
+| --- | --- |
+| 폰 브라우저에서 `/health`가 안 열림 | 서버를 `--host 0.0.0.0`으로 실행했는지 (빠뜨리면 노트북 안에서만 접속됨) |
+| | Windows 방화벽 허용 창이 떴다면 허용 |
+| | 회사·학교 Wi-Fi는 기기끼리 통신을 막기도 한다 → 폰 핫스팟에 노트북을 연결하고 IP를 다시 확인해 `app/.env`에 넣기 |
+| 앱에 "서버에 연결할 수 없어요" | 위 `/health` 확인, `app/.env`의 IP·포트 확인 후 `npx expo start -c` |
+| 앱에 "핑계 공장이 잠깐 멈췄어요" | 서버 터미널 로그 확인. Gemini 과부하(503)나 무료 티어 한도일 수 있다. 과부하가 계속되면 `server/.env`의 `GEMINI_MODEL`로 다른 모델 지정 |
+| 앱에 "핑계도 쉬어가며…" | 레이트리밋(분당 10회). 1분 기다리거나 서버 재시작(메모리 기반이라 초기화됨) |
+| QR 스캔 후 앱 자체가 안 뜸 | `npx expo start --tunnel`. 단, 이 방법은 앱 번들만 터널로 받으므로 `EXPO_PUBLIC_API_URL`은 여전히 같은 네트워크의 IP여야 한다 |
+
+## 폴더 구조
+
+```text
+excuse-generator/
+├── app/                       # Expo 앱
+│   ├── app/                   # 화면: index(홈), result(결과), history(기록)
+│   ├── components/            # Chip, CredibilityGauge
+│   ├── constants/theme.ts     # 라이트/다크 색상
+│   └── lib/                   # api.ts(서버 호출), storage.ts(기록·즐겨찾기)
+├── server/                    # FastAPI
+│   ├── main.py                # 엔드포인트, 에러 응답, CORS
+│   ├── schemas.py             # Pydantic 모델
+│   ├── llm.py                 # Gemini 호출·파싱·검사·재시도, 신뢰도·소재 랜덤
+│   ├── prompts.py             # 시스템 프롬프트, 레벨 10 소재 후보
+│   ├── rate_limit.py          # IP별 분당 10회·일 200회
+│   ├── scripts/sample_excuses.py
+│   └── tests/
+├── docs/screenshots/          # README 스크린샷
+├── PRD.md
+└── DECISIONS.md
+```

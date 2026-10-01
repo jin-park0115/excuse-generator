@@ -6,12 +6,14 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import CredibilityGauge from '@/components/CredibilityGauge';
+import { useTheme } from '@/constants/theme';
 import { ApiError, fetchExcuse, type Tone } from '@/lib/api';
 import { addHistory, toggleFavorite, type SavedExcuse } from '@/lib/storage';
 
 const LOADING_TEXTS = ['변명을 숙성하는 중…', '알리바이를 짜맞추는 중…', '그럴듯함을 계산하는 중…', '핑계 장인을 깨우는 중…'];
 
 export default function ResultScreen() {
+  const c = useTheme();
   const { situation, absurdity, tone } = useLocalSearchParams<{ situation: string; absurdity: string; tone: Tone }>();
   const [excuse, setExcuse] = useState<SavedExcuse | null>(null);
   const [favorite, setFavorite] = useState(false);
@@ -65,70 +67,80 @@ export default function ResultScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.meta}>
+      <Text style={[styles.meta, { color: c.subtext }]}>
         {situation} · 황당함 {absurdity} · {tone}
       </Text>
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
         {loading ? (
           <View style={styles.loading}>
-            <ActivityIndicator />
-            <Text style={styles.loadingText}>{loadingText}</Text>
+            <ActivityIndicator color={c.subtext} />
+            <Text style={[styles.loadingText, { color: c.subtext }]}>{loadingText}</Text>
           </View>
         ) : error ? (
-          <Text style={styles.error}>{error}</Text>
+          <Text style={[styles.error, { color: c.bad }]}>{error}</Text>
         ) : (
-          <Text style={styles.excuse}>{excuse?.excuse}</Text>
+          <>
+            <Text style={[styles.excuse, { color: c.text }]}>{excuse?.excuse}</Text>
+            {canUse && (
+              <View style={[styles.divider, { borderColor: c.border }]}>
+                <CredibilityGauge credibility={excuse.credibility} comment={excuse.comment} />
+              </View>
+            )}
+          </>
         )}
       </View>
 
-      {canUse && <CredibilityGauge credibility={excuse.credibility} comment={excuse.comment} />}
-
+      {/* 에러 후 다시 뽑기는 마지막으로 성공한 핑계를 previous_excuse로 보낸다 */}
+      <ActionButton primary label="다시 뽑기" disabled={loading} onPress={() => load(excuse?.excuse ?? null)} />
       <View style={styles.row}>
-        {/* 에러 후 다시 뽑기는 마지막으로 성공한 핑계를 previous_excuse로 보낸다 */}
-        <ActionButton label="다시 뽑기" disabled={loading} onPress={() => load(excuse?.excuse ?? null)} />
         <ActionButton label="복사" disabled={!canUse} onPress={copy} />
         <ActionButton label="공유" disabled={!canUse} onPress={() => excuse && Share.share({ message: excuse.excuse })} />
         <ActionButton
-          label={favorite ? '★' : '☆'}
+          label={favorite ? '★ 저장됨' : '☆ 즐겨찾기'}
           accessibilityLabel={favorite ? '즐겨찾기 해제' : '즐겨찾기'}
           disabled={!canUse}
           onPress={async () => excuse && setFavorite(await toggleFavorite(excuse))}
         />
       </View>
 
-      {toast && <Text style={styles.toast}>{toast}</Text>}
+      {toast && <Text style={[styles.toast, { backgroundColor: c.toast, color: c.onToast }]}>{toast}</Text>}
     </View>
   );
 }
 
-type ActionButtonProps = { label: string; accessibilityLabel?: string; disabled: boolean; onPress: () => void };
+type ActionButtonProps = { label: string; accessibilityLabel?: string; primary?: boolean; disabled: boolean; onPress: () => void };
 
-function ActionButton({ label, accessibilityLabel, disabled, onPress }: ActionButtonProps) {
+// primary는 꽉 찬 주 버튼, 나머지는 테두리만 있는 보조 버튼
+function ActionButton({ label, accessibilityLabel, primary, disabled, onPress }: ActionButtonProps) {
+  const c = useTheme();
+  const bg = primary ? (disabled ? c.disabled : c.primary) : c.card;
+  const fg = disabled ? c.onDisabled : primary ? c.onPrimary : c.text;
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      style={[styles.button, disabled && styles.buttonOff]}
+      style={[styles.button, !primary && styles.secondary, { backgroundColor: bg, borderColor: c.border }]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled }}
     >
-      <Text style={styles.buttonText}>{label}</Text>
+      <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, gap: 16 },
-  meta: { fontSize: 14, color: '#888', textAlign: 'center' },
-  card: { padding: 24, borderRadius: 16, backgroundColor: '#F2F7FE', minHeight: 140, justifyContent: 'center' },
-  excuse: { fontSize: 20, lineHeight: 30 },
+  container: { flex: 1, padding: 20, gap: 12 },
+  meta: { fontSize: 13, textAlign: 'center' },
+  card: { padding: 20, borderRadius: 20, borderWidth: 1, minHeight: 140, justifyContent: 'center', gap: 16 },
+  excuse: { fontSize: 17, lineHeight: 26 },
+  divider: { borderTopWidth: 1, paddingTop: 16 },
   loading: { alignItems: 'center', gap: 12 },
-  loadingText: { fontSize: 16, color: '#555' },
-  error: { fontSize: 18, lineHeight: 28, color: '#C0392B', textAlign: 'center' },
+  loadingText: { fontSize: 15 },
+  error: { fontSize: 16, lineHeight: 24, textAlign: 'center' },
   row: { flexDirection: 'row', gap: 8 },
-  button: { flex: 1, minHeight: 48, borderRadius: 12, backgroundColor: '#208AEF', alignItems: 'center', justifyContent: 'center' },
-  buttonOff: { backgroundColor: '#aaa' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  toast: { alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#333', color: '#fff', overflow: 'hidden' },
+  button: { minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  secondary: { flex: 1, borderWidth: 1 },
+  buttonText: { fontSize: 15, fontWeight: '600' },
+  toast: { alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, overflow: 'hidden' },
 });
