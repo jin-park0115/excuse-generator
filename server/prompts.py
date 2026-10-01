@@ -11,7 +11,8 @@ SYSTEM_PROMPT = """너는 한국어로 웃기고 그럴듯한 핑계를 만들�
 - 4~6 (수상함): "실제로 일어났다고 해도 믿을 수 있는 평범한 사건 딱 1개" + "쓸데없이 과하게 구체적인 디테일".
   사건 자체는 평범해야 하고, 수상한 느낌은 오직 디테일(정확한 숫자, 사람 호칭, 주고받은 대화, 일의 순서)에서만 나온다.
   금지: 동물이 등장하거나 이상한 행동을 함 / 의식·주술·미신·초자연 요소 / 비현실적으로 큰 행동(먼 곳을 돌아다님, 몇 시간짜리 모험) / 사건 여러 개를 이어 붙이기.
-- 7~9 (황당): 소재를 물리적으로는 가능하지만 황당한 수준까지 과장한 사건 하나. 우연이 겹치거나, 규모가 터무니없이 커지거나, 동물이 엉뚱하게 끼어들어도 된다. 초자연 요소는 넣지 않는다.
+- 7~9 (황당): 소재를 사용자 프롬프트의 "과장 방법"으로 물리적으로는 가능하지만 황당한 수준까지 부풀린 사건 하나. 초자연 요소는 넣지 않는다.
+  레벨 4~6보다 확실히 황당해야 하고, 듣는 사람이 웃음이 터질 정도여야 한다. 현실에서 흔히 있을 법한 일에 디테일만 붙인 수준(레벨 4~6)이면 실패다.
 - 10 (우주적): 현실의 법칙을 무시한다. 소재 자체의 장면을 구체적으로 그린다.
   어떤 소재든 "양자", "웜홀", "평행우주", "차원", "시공간" 같은 과학 용어는 쓰지 않는다.
 
@@ -67,6 +68,14 @@ SUSPICIOUS_TOPICS = [t for t in REALISTIC_TOPICS if not t.startswith("가벼운 
 # 레벨 7~9: 4~6 소재 + 동물 (4~6은 동물 금지)
 ABSURD_TOPICS = SUSPICIOUS_TOPICS + ["동물"]
 
+# 레벨 7~9 과장 방법 후보. 소재와 함께 서버가 하나를 랜덤으로 골라 넘긴다 (현실 소재에 끌려 밋밋해지는 것 방지)
+EXAGGERATIONS = [
+    "터무니없는 우연이 겹침",
+    "비현실적인 규모(수십·수백 개, 수십 명)",
+    "동물이나 사물의 엉뚱한 개입",
+    "작은 일이 연쇄적으로 점점 커짐",
+]
+
 COSMIC_TOPICS = [
     "미래로 시간여행",
     "외계인",
@@ -83,7 +92,7 @@ COSMIC_TOPICS = [
 ]
 
 
-def build_user_prompt(req: ExcuseRequest, credibility: int, topic: str | None = None) -> str:
+def build_user_prompt(req: ExcuseRequest, credibility: int, topic: str | None = None, exaggeration: str | None = None) -> str:
     lines = [
         f"<상황>{req.situation}</상황>",
         f"황당함 레벨: {req.absurdity}",
@@ -92,6 +101,8 @@ def build_user_prompt(req: ExcuseRequest, credibility: int, topic: str | None = 
     ]
     if topic:
         lines.append(f"소재: {topic}")
+    if exaggeration:
+        lines.append(f"과장 방법: {exaggeration}")
     if req.previous_excuse:
         lines.append(f"{RETRY_INSTRUCTION}\n<이전 핑계>{req.previous_excuse}</이전 핑계>")
     return "\n".join(lines)

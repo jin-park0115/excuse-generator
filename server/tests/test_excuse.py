@@ -190,3 +190,31 @@ def test_rule_violation_is_retried(monkeypatch: pytest.MonkeyPatch, tone: str, b
     assert res.status_code == 200
     assert len(calls) == 2  # 규칙 위반이라 재시도했다
     assert res.json()["comment"] == "그럴 법하네요."
+
+
+def test_exaggeration_only_for_levels_7_to_9() -> None:
+    for level in (7, 8, 9):
+        picked = {llm.pick_exaggeration(level) for _ in range(500)}
+        assert picked == set(llm.EXAGGERATIONS)  # 후보가 모두 고르게 나온다
+    assert all(llm.pick_exaggeration(level) is None for level in (1, 2, 3, 4, 5, 6, 10))
+
+
+def test_exaggeration_in_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(llm, "_call_model", fake_model(GOOD, GOOD, calls=calls))
+    client.post("/api/excuse", json={**VALID, "absurdity": 8})
+    client.post("/api/excuse", json={**VALID, "absurdity": 5})
+    assert any(f"과장 방법: {e}" in calls[0] for e in llm.EXAGGERATIONS)
+    assert "과장 방법:" not in calls[1]
+
+
+def test_retry_keeps_same_topic_and_exaggeration(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(llm, "_call_model", fake_model("JSON 아님", GOOD, calls=calls))
+    client.post("/api/excuse", json={**VALID, "absurdity": 8})
+    assert len(calls) == 2 and calls[0] == calls[1]
+
+
+def test_prompt_has_level_7_to_9_bar() -> None:
+    assert "레벨 4~6보다 확실히 황당" in llm.SYSTEM_PROMPT
+    assert "웃음이 터질" in llm.SYSTEM_PROMPT
