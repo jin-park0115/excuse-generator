@@ -21,7 +21,7 @@ app = FastAPI(title="핑계 생성기 API")
 # 개발 중에는 전체 허용. 배포할 때는 ALLOWED_ORIGINS="https://a.com,https://b.com"처럼 제한한다
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=(os.getenv("ALLOWED_ORIGINS") or "*").split(","),  # .env는 llm.py import 때 읽힌다
+    allow_origins=[o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "*").split(",")],  # .env는 llm.py import 때 읽힌다
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )

@@ -252,6 +252,21 @@ Render는 프록시 뒤에서 서버를 돌리므로, 서버는 `X-Forwarded-For
 | 화면 폭 | 폰 전체 | PC에서는 가운데 640px |
 | 다크 모드 | 폰 설정 | 브라우저·OS 설정 |
 
+### CORS: 웹 주소만 허용하기
+
+Render 서버는 `ALLOWED_ORIGINS` 환경변수에 적힌 웹 주소에서 온 **브라우저 요청만** 받습니다. 값은 비밀이 아니라서 [`render.yaml`](render.yaml)에 적어 두었습니다.
+
+```yaml
+      - key: ALLOWED_ORIGINS
+        value: https://excuse-generator-app.vercel.app
+```
+
+- `https://`까지 쓰고 끝에 `/`는 붙이지 않는다. 주소가 여러 개면 쉼표로 구분한다
+- `render.yaml`을 고쳐 push하면 Render가 자동으로 다시 배포한다 (Blueprint 자동 동기화)
+- 값을 비우거나 지우면 전체 허용(`*`)으로 돌아간다 (로컬 개발용)
+- **Expo 앱(폰)은 영향을 받지 않는다.** CORS는 브라우저만 검사하는 규칙이고, 네이티브 앱은 `Origin` 헤더를 보내지 않는다
+- Vercel 미리보기 주소(`…-git-브랜치-….vercel.app`)는 허용 목록에 없어서 서버 호출이 막힌다. 미리보기도 쓰려면 그 주소를 쉼표로 추가한다
+
 ## 폴더 구조
 
 ```text

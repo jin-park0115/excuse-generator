@@ -17,3 +17,6 @@ services:
         sync: false
       - key: GEMINI_MODEL
         sync: false
+      # 웹(Vercel) 주소만 브라우저 호출을 허용한다. 비밀 값이 아니라 여기에 적는다. 여러 개면 쉼표로 구분, 끝에 / 없이
+      - key: ALLOWED_ORIGINS
+        value: https://excuse-generator-app.vercel.app
