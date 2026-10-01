@@ -1,0 +1,19 @@
+# Render 배포 설정 (Blueprint). Render 대시보드에서 New → Blueprint로 이 저장소를 연결하면 이 파일대로 서버를 만든다.
+# 비밀 값(sync: false)은 처음 만들 때 대시보드에서 직접 입력한다. 이 파일에는 절대 키를 적지 않는다.
+services:
+  - type: web
+    name: excuse-generator-api
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: server
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false

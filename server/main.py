@@ -29,6 +29,16 @@ app.add_middleware(
 limiter = RateLimiter(per_minute=10, per_day=200)
 
 
+def client_ip(request: Request) -> str:
+    """레이트리밋용 클라이언트 IP. Render 같은 프록시 뒤에서는 X-Forwarded-For의 맨 뒤 값(프록시가 붙인 실제 접속 IP)을 쓴다.
+    맨 앞 값은 클라이언트가 마음대로 넣을 수 있어서 쓰지 않는다."""
+    # ponytail: 프록시가 한 겹이라고 가정. 프록시가 여러 겹이면 맨 뒤가 내부 프록시 IP가 되어 모두가 한도를 같이 쓴다
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def error_response(status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message}})
 
@@ -49,8 +59,7 @@ async def create_excuse(req: ExcuseRequest, request: Request) -> ExcuseResponse 
     start = time.monotonic()
     error = "-"
     try:
-        # ponytail: 직접 연결한 IP 기준. 프록시 뒤에 배포하면 X-Forwarded-For를 봐야 한다
-        if not limiter.allow(request.client.host if request.client else "unknown"):
+        if not limiter.allow(client_ip(request)):
             error = "RATE_LIMITED"
             return error_response(429, error, "핑계도 쉬어가며 만들어야 해요. 잠시 후 다시!")
         return await llm.generate_excuse(req)

@@ -47,7 +47,7 @@ flowchart LR
 
 앱 번들에 들어간 값은 누구나 꺼내 볼 수 있습니다. `EXPO_PUBLIC_` 환경변수도 빌드 시점에 코드에 그대로 박히기 때문에 비밀이 아닙니다. 그래서 앱은 **서버 주소만** 알고, LLM 호출과 API 키는 서버가 전담합니다.
 
-- 키는 `server/.env`에만 두고 `.gitignore`로 커밋에서 제외 (`.env.example`에는 키 이름만)
+- 키는 로컬에서는 `server/.env`, 배포 서버에서는 Render 환경변수에만 둔다. `.env`는 `.gitignore`로 커밋에서 제외하고, `.env.example`·`render.yaml`에는 키 이름만 적는다
 - 키를 서버에 두면 **레이트리밋·입력 검증·프롬프트 관리**도 서버 한 곳에서 할 수 있다. 앱을 다시 배포하지 않고 프롬프트를 고칠 수 있다
 - 로그에는 시간·레벨·말투·응답 시간·에러 코드만 남기고, 사용자가 입력한 텍스트와 키는 남기지 않는다
 
@@ -174,6 +174,54 @@ npx expo start
 | 앱에 "핑계도 쉬어가며…" | 레이트리밋(분당 10회). 1분 기다리거나 서버 재시작(메모리 기반이라 초기화됨) |
 | QR 스캔 후 앱 자체가 안 뜸 | `npx expo start --tunnel`. 단, 이 방법은 앱 번들만 터널로 받으므로 `EXPO_PUBLIC_API_URL`은 여전히 같은 네트워크의 IP여야 한다 |
 
+## 배포 (Render 서버)
+
+서버는 Render 무료 티어(Singapore 리전)에 올립니다. 설정은 저장소 루트의 [`render.yaml`](render.yaml)에 있고, API 키는 Render 환경변수로만 넣습니다.
+
+### 1. Render에 서버 만들기
+
+1. 이 저장소를 GitHub에 push한다 (`server/.env`는 `.gitignore`로 제외되어 올라가지 않는다)
+2. https://dashboard.render.com → **New → Blueprint** → GitHub 저장소 연결 → 이 저장소 선택
+3. Render가 `render.yaml`을 읽어 `excuse-generator-api` 서비스(Python, Singapore, Free)를 보여준다
+4. 환경변수 입력 화면에서:
+   - `GEMINI_API_KEY`: Gemini API 키
+   - `GEMINI_MODEL`: `gemini-3.5-flash-lite` (비워 두면 이 값이 기본으로 쓰인다)
+5. **Apply / Deploy**를 누르고 로그에 `Uvicorn running on http://0.0.0.0:10000`이 보일 때까지 기다린다
+6. 서비스 페이지 위쪽의 주소(예: `https://excuse-generator-api.onrender.com`) 뒤에 `/health`를 붙여 열면 `{"status":"ok"}`가 나와야 한다
+
+나중에 키를 바꿀 때는 서비스 → **Environment**에서 고치고 저장하면 다시 배포된다.
+
+### 2. 앱이 배포 서버를 쓰게 하기
+
+`app/.env`의 주소를 Render 주소로 바꾸고 `npx expo start -c`로 다시 시작한다. `https://`로 시작하고 끝에 `/`는 붙이지 않는다.
+
+```
+EXPO_PUBLIC_API_URL=https://excuse-generator-api.onrender.com
+```
+
+이제 노트북 서버를 켜지 않아도, 폰이 같은 Wi-Fi에 있지 않아도 동작한다.
+
+### 3. 서버가 잠들지 않게 하기 (GitHub Actions)
+
+Render 무료 서버는 **15분 동안 요청이 없으면 잠들고, 다시 깨는 데 약 1분** 걸린다. [`.github/workflows/keep-alive.yml`](.github/workflows/keep-alive.yml)이 10분마다 `/health`를 호출해 서버를 깨워 둔다.
+
+1. GitHub 저장소 → **Settings → Secrets and variables → Actions → New repository secret**
+   - Name: `SERVER_URL`, Secret: `https://excuse-generator-api.onrender.com` (끝에 `/` 없이)
+2. **Actions** 탭 → `keep-alive` → **Run workflow**로 한 번 수동 실행해 초록색 체크가 뜨는지 확인한다
+3. 이후에는 10분마다 자동으로 실행된다
+
+주의할 점:
+
+- **비공개 저장소는 Actions 무료 시간(월 2,000분)을 넘는다.** 실행마다 1분으로 올림 계산되어 10분 간격이면 월 약 4,300분이다. 공개 저장소는 무료로 제한이 없다
+- GitHub 예약 실행은 몇 분씩 늦어질 수 있어서, 가끔은 15분을 넘겨 서버가 잠들 수 있다
+- 공개 저장소에서 60일 동안 커밋이 없으면 GitHub가 예약 실행을 자동으로 끈다 (Actions 탭에서 다시 켤 수 있다)
+- Render 무료 인스턴스 시간은 월 750시간이라, 서버 1개를 한 달 내내 켜 두어도(최대 744시간) 넘지 않는다. 다른 무료 서비스를 함께 돌리면 넘을 수 있다
+- `/health`는 Gemini를 호출하지 않으므로 Gemini 무료 한도를 쓰지 않는다
+
+### 레이트리밋과 프록시
+
+Render는 프록시 뒤에서 서버를 돌리므로, 서버는 `X-Forwarded-For` 헤더의 **맨 뒤 값**(프록시가 붙인 실제 접속 IP)으로 사용자를 구분한다. 맨 앞 값은 사용자가 마음대로 넣을 수 있어서 쓰지 않는다.
+
 ## 폴더 구조
 
 ```text
@@ -192,6 +240,8 @@ excuse-generator/
 │   ├── scripts/sample_excuses.py
 │   └── tests/
 ├── docs/screenshots/          # README 스크린샷
+├── .github/workflows/keep-alive.yml  # 10분마다 /health 호출 (Render 서버 깨워 두기)
+├── render.yaml                # Render 배포 설정
 ├── PRD.md
 └── DECISIONS.md
 ```

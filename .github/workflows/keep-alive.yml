@@ -1,0 +1,26 @@
+# Render 무료 서버가 15분 무요청으로 잠들지 않도록 10분마다 /health를 호출한다.
+# 서버 주소는 저장소 Settings → Secrets and variables → Actions의 SERVER_URL에서 읽는다 (예: https://excuse-generator-api.onrender.com).
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # GitHub 사정으로 몇 분씩 늦게 실행될 수 있다
+  workflow_dispatch: # Actions 탭에서 수동 실행해 동작을 확인할 수 있다
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /health
+        env:
+          SERVER_URL: ${{ secrets.SERVER_URL }}
+        run: |
+          if [ -z "$SERVER_URL" ]; then
+            echo "::error::SERVER_URL secret이 없습니다"
+            exit 1
+          fi
+          # 잠든 서버는 깨는 데 약 1분 걸리므로 넉넉히 기다린다
+          curl --fail --silent --show-error --max-time 90 --retry 2 --retry-delay 10 "${SERVER_URL%/}/health"

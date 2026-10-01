@@ -46,3 +46,20 @@ def test_endpoint_returns_429(monkeypatch: pytest.MonkeyPatch) -> None:
     res = client.post("/api/excuse", json=body)
     assert res.status_code == 429
     assert res.json() == {"error": {"code": "RATE_LIMITED", "message": "핑계도 쉬어가며 만들어야 해요. 잠시 후 다시!"}}
+
+
+def test_limit_uses_last_forwarded_ip(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 프록시 뒤에서는 X-Forwarded-For 맨 뒤(프록시가 붙인 값)로 사용자를 구분한다. 맨 앞은 조작 가능하므로 무시
+    good = json.dumps({"excuse": "버스가 늦었습니다.", "comment": "그럴 법하네요."}, ensure_ascii=False)
+
+    async def fake(system: str, user: str) -> str:
+        return good
+
+    monkeypatch.setattr(llm, "_call_model", fake)
+    monkeypatch.setattr(main, "limiter", RateLimiter(per_minute=1, per_day=200))
+    client = TestClient(main.app)
+    body = {"situation": "지각", "absurdity": 1}
+    post = lambda xff: client.post("/api/excuse", json=body, headers={"X-Forwarded-For": xff}).status_code  # noqa: E731
+    assert post("9.9.9.9, 1.1.1.1") == 200
+    assert post("8.8.8.8, 1.1.1.1") == 429  # 맨 앞을 바꿔도 같은 사용자(1.1.1.1)
+    assert post("9.9.9.9, 2.2.2.2") == 200  # 맨 뒤가 다르면 다른 사용자
