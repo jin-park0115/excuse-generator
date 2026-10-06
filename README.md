@@ -255,6 +255,15 @@ Render는 프록시 뒤에서 서버를 돌리므로, 서버는 `X-Forwarded-For
 
 `EXPO_PUBLIC_API_URL`은 **빌드할 때** 코드에 들어가므로, 서버 주소를 바꾸면 Vercel에서 **Redeploy**해야 반영된다.
 
+### 홈 화면에 앱처럼 추가하기
+
+앱스토어 없이도 홈 화면 아이콘으로 설치해 쓸 수 있습니다. 홈 화면에서 열면 주소창 없이 전체 화면으로 뜨고, 아이콘과 이름은 "핑계생성기"로 나옵니다.
+
+- **iPhone (Safari)**: 웹 주소 열기 → 아래쪽 공유 버튼 → **홈 화면에 추가**
+- **Android (Chrome)**: 웹 주소 열기 → 오른쪽 위 ⋮ → **홈 화면에 추가** (또는 **앱 설치**)
+
+설정은 `app/public/`에 있습니다: `index.html`(아이콘·이름·전체 화면·상단 표시줄 색), `manifest.json`(Android용 앱 정보), 아이콘 PNG(180·192·512px).
+
 ### 웹에서 달라지는 점
 
 | 기능 | 앱 (Expo Go) | 웹 |
@@ -289,6 +298,7 @@ excuse-generator/
 │   ├── components/            # Chip, CredibilityGauge
 │   ├── constants/theme.ts     # 라이트/다크 색상
 │   ├── vercel.json            # 웹 배포 설정 (Vercel)
+│   ├── public/                # 웹 HTML 템플릿, manifest.json, 홈 화면 아이콘
 │   └── lib/                   # api.ts(서버 호출), storage.ts(기록·즐겨찾기)
 ├── server/                    # FastAPI
 │   ├── main.py                # 엔드포인트, 에러 응답, CORS
